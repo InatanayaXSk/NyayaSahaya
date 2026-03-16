@@ -8,3 +8,8 @@
 /NyayaSahaya-bot/.env
 /NyayaSahaya/venv
 /NyayaSahaya/.gitignore
+
+#backend
+/backend/app/__pycache__
+backend/app/api/__pycache__
+backend/lexnet.db
