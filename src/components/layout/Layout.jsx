@@ -1,14 +1,34 @@
-import React from 'react';
+import React, { useState } from 'react';
 import GlassNav from './GlassNav';
+import Chatbot from '../Chatbot/Chatbot';
 
 export default function Layout({ children }) {
+    const [isChatOpen, setIsChatOpen] = useState(false);
+
     return (
         <div className="bg-background-light dark:bg-background-dark min-h-screen font-display text-slate-900 dark:text-slate-100 transition-colors duration-300">
             <GlassNav />
             <main className="pt-20">{children}</main>
-            {/* Background decorations */}
-            <div className="fixed -bottom-24 -left-24 w-96 h-96 bg-primary/10 rounded-full blur-3xl -z-10 pointer-events-none"></div>
-            <div className="fixed top-24 -right-24 w-96 h-96 bg-primary/5 rounded-full blur-3xl -z-10 pointer-events-none"></div>
+            {/* Global Floating AI Assistant Toggle */}
+            <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-4 pointer-events-none">
+                {/* Chat Window */}
+                {isChatOpen && (
+                    <div className="pointer-events-auto shadow-2xl rounded-2xl overflow-hidden border border-slate-200/50 bg-white dark:bg-card-dark mb-2 animate-in slide-in-from-bottom-5">
+                       <Chatbot />
+                    </div>
+                )}
+                
+                {/* Toggle Button */}
+                <button 
+                    onClick={() => setIsChatOpen(!isChatOpen)}
+                    className="pointer-events-auto w-14 h-14 rounded-full bg-primary text-white shadow-lg shadow-primary/30 flex items-center justify-center hover:scale-105 transition-transform"
+                    aria-label="Toggle AI Chat"
+                >
+                    <span className="material-symbols-outlined text-3xl">
+                        {isChatOpen ? 'close' : 'smart_toy'}
+                    </span>
+                </button>
+            </div>
         </div>
     );
 }

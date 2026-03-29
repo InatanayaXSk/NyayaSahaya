@@ -1,13 +1,85 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
-const authSteps = [
-    { name: 'Initial Handshake', status: 'Complete (0.4ms)', done: true },
-    { name: 'Hardware ID Check', status: 'TLN-BLR-001 Confirmed', done: true },
-    { name: 'Biometric Verification', status: 'Processing 85%', done: false, active: true },
-    { name: 'Final Token Grant', status: 'Waiting...', done: false },
+const defaultAuthSteps = [
+    { name: 'Initial Handshake', status: 'Waiting...', done: false, active: false },
+    { name: 'Hardware ID Check', status: 'Waiting...', done: false, active: false },
+    { name: 'Biometric Verification', status: 'Waiting...', done: false, active: false },
+    { name: 'Final Token Grant', status: 'Waiting...', done: false, active: false },
 ];
 
 export default function HardwareAuthPage() {
+    const [status, setStatus] = useState("Offline");
+    const [authSteps, setAuthSteps] = useState(defaultAuthSteps);
+    const [biometricMatch, setBiometricMatch] = useState(0);
+    const [confidence, setConfidence] = useState("0.0000");
+
+    useEffect(() => {
+        let ws;
+        let reconnectTimeout;
+        
+        const connect = () => {
+            ws = new WebSocket('ws://localhost:8000/ws/hardware');
+            
+            ws.onopen = () => setStatus("Online");
+            ws.onclose = () => {
+                setStatus("Offline");
+                // Auto-reconnect after 2 seconds
+                reconnectTimeout = setTimeout(connect, 2000);
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'auth_event') {
+                        const step = data.data.step;
+                        const msg = data.data.message;
+                        
+                        if (step === 'start') {
+                            setAuthSteps([
+                                { name: 'Initial Handshake', status: 'Complete', done: true, active: false },
+                                { name: 'Hardware ID Check', status: msg, done: false, active: true },
+                                { name: 'Biometric Verification', status: 'Waiting...', done: false, active: false },
+                                { name: 'Final Token Grant', status: 'Waiting...', done: false, active: false }
+                            ]);
+                        } else if (step === 'processing') {
+                            setBiometricMatch(85.4);
+                            setConfidence("0.9982");
+                            setAuthSteps([
+                                { name: 'Initial Handshake', status: 'Complete', done: true, active: false },
+                                { name: 'Hardware ID Check', status: 'Verified', done: true, active: false },
+                                { name: 'Biometric Verification', status: msg, done: false, active: true },
+                                { name: 'Final Token Grant', status: 'Waiting...', done: false, active: false }
+                            ]);
+                        } else if (step === 'success') {
+                            setBiometricMatch(99.9);
+                            setConfidence("1.0000");
+                            setAuthSteps([
+                                { name: 'Initial Handshake', status: 'Complete', done: true, active: false },
+                                { name: 'Hardware ID Check', status: 'Verified', done: true, active: false },
+                                { name: 'Biometric Verification', status: 'Success', done: true, active: false },
+                                { name: 'Final Token Grant', status: 'Token Granted', done: true, active: false }
+                            ]);
+                        }
+                    } else if (data.type === 'hardware_status') {
+                        // update status if needed
+                    }
+                } catch (e) {
+                    console.error("WS Parse Error:", e);
+                }
+            };
+        };
+
+        connect();
+
+        return () => {
+            clearTimeout(reconnectTimeout);
+            if (ws) ws.close();
+        };
+    }, []);
+
+    const triggerAuth = async () => {
+        fetch('http://localhost:8000/api/hardware/authenticate', { method: 'POST' }).catch(console.error);
+    };
     return (
         <div className="pt-8 pb-12 px-6 max-w-6xl mx-auto">
             <div className="flex flex-col lg:flex-row gap-8">
@@ -15,8 +87,8 @@ export default function HardwareAuthPage() {
                 <div className="flex-1 flex flex-col gap-6">
                     <div>
                         <div className="flex items-center gap-2 mb-2">
-                            <span className="inline-block w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-                            <span className="text-xs font-bold text-primary tracking-widest uppercase">System Online</span>
+                            <span className={`inline-block w-2 h-2 rounded-full ${status === 'Online' ? 'bg-primary animate-pulse' : 'bg-red-500'}`}></span>
+                            <span className={`text-xs font-bold tracking-widest uppercase ${status === 'Online' ? 'text-primary' : 'text-red-500'}`}>System {status}</span>
                         </div>
                         <h1 className="text-4xl font-black tracking-tighter text-slate-900 mb-1">Hardware Authentication</h1>
                         <p className="text-slate-500 font-medium">Device: <span className="text-primary">TLN-BLR-001</span> • Location: Bangalore Hub</p>
@@ -37,7 +109,7 @@ export default function HardwareAuthPage() {
                                 <h3 className="text-primary text-xl font-mono font-bold tracking-widest mb-1 uppercase">Scanning Biometrics</h3>
                                 <div className="flex items-center gap-4 justify-center">
                                     <span className="text-[10px] font-mono text-primary/60 uppercase tracking-tighter">Layer 01: Dermal Scan</span>
-                                    <span className="text-[10px] font-mono text-primary uppercase tracking-tighter font-bold">85.4% Match</span>
+                                    <span className="text-[10px] font-mono text-primary uppercase tracking-tighter font-bold">{biometricMatch}% Match</span>
                                 </div>
                             </div>
                         </div>
@@ -49,7 +121,7 @@ export default function HardwareAuthPage() {
                         {/* Top-right confidence */}
                         <div className="absolute top-6 right-6 text-right">
                             <p className="text-[10px] font-mono text-primary/60 uppercase">Confidence Level</p>
-                            <p className="text-2xl font-mono font-black text-primary">0.9982</p>
+                            <p className="text-2xl font-mono font-black text-primary">{confidence}</p>
                         </div>
                     </div>
 
@@ -106,8 +178,8 @@ export default function HardwareAuthPage() {
                                 <p className="text-[10px] text-slate-600 font-medium">Contact Security Admin</p>
                             </div>
                         </div>
-                        <button className="w-full bg-primary text-slate-900 font-black text-xs py-3 rounded-xl uppercase tracking-widest shadow-lg shadow-primary/20 hover:brightness-95 transition-all">
-                            Request Manual Override
+                        <button onClick={triggerAuth} className="w-full bg-primary text-slate-900 font-black text-xs py-3 rounded-xl uppercase tracking-widest shadow-lg shadow-primary/20 hover:brightness-95 transition-all">
+                            Simulate Hardware Auth
                         </button>
                     </div>
 

@@ -3,10 +3,10 @@ import React, { useState, useEffect } from 'react';
 const API_BASE = 'http://localhost:8000/api';
 
 const metrics = [
-    { label: 'Active Cases', icon: 'folder_open', key: 'active_cases', trendKey: 'active_cases_trend', color: 'border-t-dash-primary' },
+    { label: 'Total Documents', icon: 'folder_open', key: 'active_cases', trendKey: 'active_cases_trend', color: 'border-t-dash-primary' },
     { label: 'Docs Processed', icon: 'description', key: 'docs_processed', trendKey: 'docs_trend', color: 'border-t-dash-secondary' },
-    { label: 'Critical Risks', icon: 'warning', key: 'critical_risks', trendKey: 'risks_trend', color: 'border-t-dash-accent' },
-    { label: 'Pending Reviews', icon: 'pending_actions', key: 'pending_reviews', trendKey: 'reviews_trend', color: 'border-t-dash-neutral-dim' },
+    { label: 'Signatures', icon: 'draw', key: 'critical_risks', trendKey: 'risks_trend', color: 'border-t-dash-accent' },
+    { label: 'Audit Events', icon: 'history', key: 'pending_reviews', trendKey: 'reviews_trend', color: 'border-t-dash-neutral-dim' },
 ];
 
 const defaultStats = {

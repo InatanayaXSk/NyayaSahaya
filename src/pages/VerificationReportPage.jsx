@@ -1,13 +1,38 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
-const auditEvents = [
+const defaultEvents = [
     { title: 'Certification Finalized', time: '14:30:05 UTC', desc: 'Document locked and permanent hash stored on LexNet Ledger. All signatories validated.', active: true },
-    { title: 'Multi-Signature Cycle Initiated', time: '14:29:12 UTC', desc: 'Requesting verification signatures from secondary network nodes.' },
-    { title: 'Virus & Malicious Content Scan', time: '14:28:45 UTC', desc: 'Clean. No malicious scripts or hidden payloads detected in file structure.' },
-    { title: 'Source Document Upload', time: '14:28:02 UTC', desc: 'Document received via encrypted gateway from User ID: 992-K' },
+    { title: 'Multi-Signature Cycle Initiated', time: '14:29:12 UTC', desc: 'Requesting verification signatures from secondary network nodes.', active: false },
+    { title: 'Virus & Malicious Content Scan', time: '14:28:45 UTC', desc: 'Clean. No malicious scripts or hidden payloads detected in file structure.', active: false },
+    { title: 'Source Document Upload', time: '14:28:02 UTC', desc: 'Document received via encrypted gateway.', active: false },
 ];
 
 export default function VerificationReportPage() {
+    const [auditEvents, setAuditEvents] = useState(defaultEvents);
+    const [docData, setDocData] = useState({ hash: 'e3b0c442...8fc1d', id: 'LNX-DOC-7742-XP', status: 'INTEGRITY VERIFIED' });
+
+    useEffect(() => {
+        fetch('http://localhost:8000/api/documents/1')
+            .then(res => res.json())
+            .then(data => {
+                if(data.events && data.events.length > 0) {
+                    setAuditEvents(data.events.map((e, i) => ({
+                        title: e.action,
+                        desc: e.details,
+                        time: new Date(e.timestamp).toLocaleTimeString(),
+                        active: i === 0
+                    })));
+                }
+                if(data.content_hash) {
+                    setDocData({
+                        hash: data.content_hash,
+                        id: `LNX-DOC-${data.id}`,
+                        status: data.status.toUpperCase()
+                    });
+                }
+            })
+            .catch(() => console.error("Could not fetch verifying document backend data, using fallback"));
+    }, []);
     return (
         <div className="flex-1 px-4 md:px-20 lg:px-40 py-10">
             <div className="max-w-[1000px] mx-auto bg-white shadow-sm border border-slate-200 rounded-xl p-8 md:p-12">
@@ -35,12 +60,12 @@ export default function VerificationReportPage() {
                         <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Verification Status</p>
                         <div className="flex items-center gap-2 text-primary">
                             <span className="material-symbols-outlined">verified</span>
-                            <p className="tracking-tight text-lg font-black leading-tight">INTEGRITY VERIFIED</p>
+                            <p className="tracking-tight text-lg font-black leading-tight">{docData.status}</p>
                         </div>
                     </div>
                     <div className="flex flex-col gap-2 rounded-xl p-6 border border-slate-200">
                         <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Document ID</p>
-                        <p className="text-slate-900 tracking-tight text-lg font-mono font-bold leading-tight">LNX-DOC-7742-XP</p>
+                        <p className="text-slate-900 tracking-tight text-lg font-mono font-bold leading-tight">{docData.id}</p>
                     </div>
                     <div className="flex flex-col gap-2 rounded-xl p-6 border border-slate-200">
                         <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Cert. Timestamp</p>
@@ -65,7 +90,7 @@ export default function VerificationReportPage() {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {[
-                                    { metric: 'File Payload Hash', algo: 'SHA-256', value: 'e3b0c442...8fc1d', result: 'MATCHED' },
+                                    { metric: 'File Payload Hash', algo: 'SHA-256', value: docData.hash.slice(0, 16) + '...', result: 'MATCHED' },
                                     { metric: 'Metadata Header', algo: 'Keccak-256', value: 'f928a31b...0219c', result: 'MATCHED' },
                                     { metric: 'Blockchain Block #', algo: 'Mainnet-V2', value: '18,442,109', result: 'VERIFIED' },
                                 ].map((row, i) => (
