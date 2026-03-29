@@ -1,0 +1,831 @@
+# 🌐 LexNet: Trusted Network for Legal Documents
+
+### *A Hardware-Anchored Intelligent Network for Secure Legal Document Operations*
+
+> **Interdisciplinary Project Plan** — 2 CS + 2 ECE Students
+> Built on the foundations of **NyayaSahaya** (3rd Semester Project)
+
+---
+
+## 📋 Table of Contents
+
+1. [Executive Summary](#executive-summary)
+2. [The Problem — A Story](#the-problem)
+3. [Your Existing Foundation](#your-foundation)
+4. [The Solution — LexNet](#the-solution)
+5. [System Architecture](#system-architecture)
+6. [Hardware Design — Trusted Legal Nodes](#hardware-design)
+7. [Software Design — Legal AI Platform](#software-design)
+8. [Real-World Usage Story](#usage-story)
+9. [Team Work Division](#team-division)
+10. [Implementation Timeline](#timeline)
+11. [Research Contributions](#research-contributions)
+12. [Hardware BOM & Cost Estimate](#hardware-bom)
+13. [Why This Project Wins](#why-this-wins)
+
+---
+
+## 1. Executive Summary <a name="executive-summary"></a>
+
+**LexNet** transforms the existing NyayaSahaya legal assistant into a **secure, networked, hardware-anchored legal intelligence platform**. It bridges Computer Science (AI, RAG, distributed systems) and Electronics (secure hardware nodes, biometric authentication, embedded systems) into a single cohesive product that addresses a real, unsolved problem — **trusted digital legal document infrastructure for India**.
+
+> [!IMPORTANT]
+> This project directly builds on your 3rd-semester NyayaSahaya project. Your existing RAG chatbot ([app.py](file:///e:/NyayaSahaya/NyayaSahaya-bot/app.py)), document generator ([doc_generator.py](file:///e:/NyayaSahaya/legal_document_generator/doc_generator.py)), and summarizer form the **Legal AI Engine** — the core intelligence layer of LexNet.
+
+---
+
+## 2. The Problem — A Story <a name="the-problem"></a>
+
+![The challenges facing legal document handling in India today](C:\Users\sumad\.gemini\antigravity\brain\5e571daa-4df7-41a7-9da8-f664d49b6413\problem_statement_1772626969475.png)
+
+### The Scene
+
+It's Monday morning in Bangalore. **Priya**, a first-time entrepreneur, is about to sign a ₹40 lakh vendor contract with a German logistics company. She doesn't have a legal team — she's bootstrapping.
+
+Here's what happens:
+
+1. **Drafting** — Her lawyer emails a Word document. It bounces between WhatsApp, Gmail, and Google Drive for 3 weeks. Nobody knows which version is final.
+
+2. **Understanding** — The contract has 47 pages of dense legal language. Priya doesn't understand what "indemnification clause under Section 73 of the Indian Contract Act" really means for her business.
+
+3. **Signing** — She prints it, signs it with a pen, scans it, and emails the scan back. The German company asks: *"How do we verify this is authentic?"*
+
+4. **Dispute** — Six months later, the vendor claims Priya agreed to different payment terms. The Word document metadata shows it was edited *after* signing. There's no tamper-proof record.
+
+5. **Compliance** — The contract involved personal data transfer to Germany. Nobody checked if it complied with India's **DPDP Act 2023** or the EU's **GDPR**.
+
+### The Core Problems
+
+| # | Problem | Impact |
+|---|---------|--------|
+| 1 | **Document Tampering** | No way to prove a document hasn't been modified after signing |
+| 2 | **No Trusted Network** | No standardized protocol for sharing legal documents between institutions |
+| 3 | **Manual Verification** | Signature verification is manual, slow, and unreliable |
+| 4 | **Complex Legal Language** | Non-lawyers can't understand their own contracts |
+| 5 | **Compliance Blind Spots** | Cross-border and domestic regulations are ignored until a dispute arises |
+
+> [!WARNING]
+> In India alone, **millions of legal documents** — contracts, affidavits, rental agreements, consent forms — are processed daily. Over **60% are handled semi-digitally** with no tamper-proofing, no intelligent analysis, and no networked verification.
+
+### The Research Question
+
+> *How can we build a secure, intelligent, hardware-anchored network where legal documents can be created, verified, summarized, and shared with **provable trust**?*
+
+---
+
+## 3. Your Existing Foundation <a name="your-foundation"></a>
+
+Your 3rd semester NyayaSahaya project is the **perfect foundation** for LexNet. Here's exactly what you've already built and how each piece maps to the new system:
+
+### Existing Codebase Mapping
+
+| Component | Your Code | Tech Stack | Role in LexNet |
+|-----------|-----------|------------|-----------------|
+| **RAG Legal Chatbot** | [app.py](file:///e:/NyayaSahaya/NyayaSahaya-bot/app.py) | FastAPI + LangChain + FAISS + InLegalBERT + Mixtral-8x22B | Becomes the **Legal AI Engine** — core intelligence for Q&A, clause explanation, risk detection |
+| **Vector Embeddings** | [Ingest.py](file:///e:/NyayaSahaya/NyayaSahaya-bot/Ingest.py) | HuggingFace `law-ai/InLegalBERT` + FAISS | Becomes the **Legal Knowledge Base** — expandable vector store for statutes, case law, compliance rules |
+| **Document Generator** | [doc_generator.py](file:///e:/NyayaSahaya/legal_document_generator/doc_generator.py) | Streamlit + ReportLab | Becomes the **Secure Document Forge** — generates tamper-proof, hash-signed legal documents |
+| **Document Summarizer** | [DocSummariser.jsx](file:///e:/NyayaSahaya/src/components/DocSummariser.jsx) | React frontend | Becomes the **Contract Intelligence Module** — risk detection + plain-language summaries |
+| **Frontend App** | [App.jsx](file:///e:/NyayaSahaya/src/App.jsx) | React + Vite + React Router | Becomes the **LexNet Dashboard** — unified portal for all operations |
+
+### What Your RAG Chatbot Already Does Well
+
+```python
+# From your app.py — this is already research-grade
+embeddings = HuggingFaceEmbeddings(model_name="law-ai/InLegalBERT")  # Legal-domain embeddings
+db = FAISS.load_local("ipc_embed_db", embeddings)                     # Vector retrieval
+llm = Together(model="mistralai/Mixtral-8x22B-Instruct-v0.1")        # Large language model
+qa = ConversationalRetrievalChain.from_llm(llm=llm, retriever=db_retriever, memory=memory)
+```
+
+### What Your Document Generator Already Does
+
+- Supports **Sale Deed**, **Will**, **Power of Attorney**
+- Template-based PDF generation with placeholder substitution
+- Professional formatting with ReportLab
+- Preview + download functionality
+
+> [!TIP]
+> **You don't need to rebuild any of this.** LexNet wraps your existing code in a secure network layer and adds hardware-anchored trust. The AI intelligence is already there — we're adding the **trust infrastructure**.
+
+---
+
+## 4. The Solution — LexNet <a name="the-solution"></a>
+
+**LexNet** is a three-layer platform:
+
+| Layer | Domain | What It Does |
+|-------|--------|--------------|
+| 🧠 **Legal AI Layer** | CS | Understands, generates, summarizes, and analyzes legal documents using your existing RAG system |
+| 🌐 **Document Network Layer** | CS | Tracks, versions, and shares documents across institutions with metadata and compliance tags |
+| 🔐 **Trusted Legal Node (Hardware)** | ECE | Physical device that authenticates users, signs documents cryptographically, and logs operations |
+
+The key insight: **Software alone cannot guarantee trust.** When a document is signed, you need **hardware-level proof** — a biometric scan, a cryptographic signature from a secure chip, a tamper-proof audit log. That's what the ECE contribution provides.
+
+---
+
+## 5. System Architecture <a name="system-architecture"></a>
+
+![LexNet System Architecture — Three-layer design from AI to Hardware](C:\Users\sumad\.gemini\antigravity\brain\5e571daa-4df7-41a7-9da8-f664d49b6413\system_architecture_1772626878625.png)
+
+### Architecture Breakdown
+
+```mermaid
+graph TB
+    subgraph "🧠 Legal AI Layer (CS Student 1)"
+        RAG["RAG Legal Assistant<br/>InLegalBERT + Mixtral"]
+        SUMM["Document Summarizer<br/>Clause Extraction"]
+        GEN["Document Generator<br/>Template Engine + ReportLab"]
+        RISK["Contract Risk Detector<br/>Missing Clauses + Risky Terms"]
+        COMPLY["Compliance Checker<br/>DPDP + GDPR + BNS"]
+    end
+
+    subgraph "🌐 Document Network (CS Student 2)"
+        API["REST API Gateway<br/>FastAPI"]
+        META["Document Metadata Store<br/>PostgreSQL"]
+        GRAPH["Knowledge Graph<br/>Neo4j / NetworkX"]
+        VER["Version Tracker<br/>Document History"]
+        HASH["Hash Registry<br/>Document Integrity"]
+    end
+
+    subgraph "🔐 Trusted Legal Node (ECE Students)"
+        FP["Fingerprint Sensor<br/>R307 / R305"]
+        SC["Smart Card Reader<br/>RC522 RFID"]
+        TPM["Secure Element<br/>ATECC608A"]
+        CAM["Document Scanner<br/>Camera Module"]
+        LOG["Hardware Audit Logger<br/>Tamper-proof Log"]
+        MCU["Raspberry Pi 4<br/>Central Controller"]
+    end
+
+    subgraph "👥 End Users"
+        LAWYER["Law Firms"]
+        COURT["Courts"]
+        NOTARY["Notaries"]
+        COMPANY["Companies"]
+    end
+
+    RAG --> API
+    SUMM --> API
+    GEN --> API
+    RISK --> API
+    COMPLY --> API
+
+    API --> META
+    API --> GRAPH
+    API --> VER
+    API --> HASH
+
+    MCU --> FP
+    MCU --> SC
+    MCU --> TPM
+    MCU --> CAM
+    MCU --> LOG
+
+    API <--> MCU
+
+    LAWYER --> MCU
+    COURT --> MCU
+    NOTARY --> MCU
+    COMPANY --> MCU
+```
+
+### Data Flow: How a Document Moves Through LexNet
+
+```
+User Request → TLN Auth (fingerprint/smartcard)
+    → AI Layer (generate/summarize/analyze)
+        → Network Layer (metadata + hash + version)
+            → TLN Signing (hardware crypto signature)
+                → Hash Registry (tamper-proof record)
+                    → Counterparty Notification
+```
+
+---
+
+## 6. Hardware Design — Trusted Legal Node (TLN) <a name="hardware-design"></a>
+
+![The Trusted Legal Node — a secure hardware gateway for legal document operations](C:\Users\sumad\.gemini\antigravity\brain\5e571daa-4df7-41a7-9da8-f664d49b6413\hardware_node_1772626894538.png)
+
+### What is a TLN?
+
+A **Trusted Legal Node** is a physical device placed at institutions (law firms, courts, notaries, companies). It acts as a **secure gateway** — no legal document operation can occur without passing through hardware-level authentication and signing.
+
+> Think of it as an **ATM for legal documents**. Just as you can't withdraw money without a card + PIN, you can't sign a legal document without biometric + hardware key.
+
+### Hardware Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│              TRUSTED LEGAL NODE (TLN)                │
+│                                                      │
+│  ┌──────────────┐  ┌──────────────┐  ┌────────────┐ │
+│  │  Raspberry    │  │  ATECC608A   │  │  R307      │ │
+│  │  Pi 4 (8GB)  │──│  Secure      │  │  Fingerprint│ │
+│  │  Controller  │  │  Element     │  │  Sensor    │ │
+│  └──────┬───────┘  └──────────────┘  └────────────┘ │
+│         │                                            │
+│  ┌──────┴───────┐  ┌──────────────┐  ┌────────────┐ │
+│  │  RC522       │  │  Pi Camera   │  │  0.96"     │ │
+│  │  RFID/NFC    │  │  Module v3   │  │  OLED      │ │
+│  │  Reader      │  │  Scanner     │  │  Display   │ │
+│  └──────────────┘  └──────────────┘  └────────────┘ │
+│                                                      │
+│  ┌──────────────┐  ┌──────────────┐  ┌────────────┐ │
+│  │  Ethernet    │  │  RTC Module  │  │  LED       │ │
+│  │  + WiFi      │  │  DS3231      │  │  Status    │ │
+│  │  Network     │  │  Timestamp   │  │  Indicator │ │
+│  └──────────────┘  └──────────────┘  └────────────┘ │
+│                                                      │
+│  Power: USB-C 5V/3A │ Enclosure: 3D Printed ABS     │
+└─────────────────────────────────────────────────────┘
+```
+
+### TLN Functions
+
+#### Function 1: Secure Document Signing
+
+```
+1. User places finger on R307 sensor
+2. Fingerprint template matched against enrolled users
+3. ATECC608A generates ECDSA-P256 digital signature
+4. Document SHA-256 hash is computed
+5. Signature = ECDSA_Sign(PrivateKey, DocumentHash)
+6. Result: Tamper-proof, hardware-backed legal signature
+```
+
+#### Function 2: Trusted Document Upload
+
+```
+1. Document scanned via Pi Camera Module v3
+2. OCR extraction (Tesseract) for metadata
+3. SHA-256 hash computed on raw document bytes
+4. Timestamp from DS3231 RTC (network-independent)
+5. Hardware signature applied via ATECC608A
+6. Metadata packet: {DocHash, UserID, Timestamp, NodeID, Signature}
+7. Uploaded to Document Network via encrypted channel (TLS 1.3)
+```
+
+#### Function 3: Physical Identity Verification
+
+```
+1. Fingerprint scan → match against enrolled templates
+2. Smart card tap → verify RFID/NFC credentials
+3. Dual-factor auth: Biometric + Something-You-Have
+4. Prevents fake signatures by requiring physical presence
+```
+
+#### Function 4: Hardware Audit Logger
+
+```
+Every operation on the TLN is logged:
+{
+    "timestamp": "2026-03-04T17:30:00+05:30",  // From RTC, not software
+    "user_id": "USR-2024-0042",
+    "document_hash": "a3f2b8c1...",
+    "operation": "SIGN",
+    "fingerprint_match_score": 0.97,
+    "node_id": "TLN-BLR-001",
+    "signature": "3045022100..."
+}
+Stored in append-only log on encrypted SD card partition.
+```
+
+### ECE Subsystem Diagrams
+
+```mermaid
+graph LR
+    subgraph "Biometric Module"
+        R307["R307 Fingerprint<br/>UART @ 57600 baud"]
+        RC522["RC522 RFID<br/>SPI Interface"]
+    end
+
+    subgraph "Security Module"
+        ATECC["ATECC608A<br/>I2C @ 0x60"]
+        RTC["DS3231 RTC<br/>I2C @ 0x68"]
+    end
+
+    subgraph "I/O Module"
+        CAM["Pi Camera v3<br/>CSI Interface"]
+        OLED["SSD1306 OLED<br/>I2C @ 0x3C"]
+        LED["WS2812B LED Strip<br/>GPIO18 PWM"]
+    end
+
+    subgraph "Controller"
+        RPI["Raspberry Pi 4<br/>8GB RAM<br/>Raspberry Pi OS"]
+    end
+
+    R307 -->|UART| RPI
+    RC522 -->|SPI| RPI
+    ATECC -->|I2C| RPI
+    RTC -->|I2C| RPI
+    CAM -->|CSI| RPI
+    OLED -->|I2C| RPI
+    LED -->|GPIO| RPI
+```
+
+---
+
+## 7. Software Design — Legal AI Platform <a name="software-design"></a>
+
+![LexNet Software Dashboard — the unified legal AI interface](C:\Users\sumad\.gemini\antigravity\brain\5e571daa-4df7-41a7-9da8-f664d49b6413\software_dashboard_1772626911459.png)
+
+### Software Architecture (Extended from NyayaSahaya)
+
+Your existing codebase evolves as follows:
+
+### Layer 1: Legal AI Engine (Your Existing Code, Enhanced)
+
+#### a) RAG Legal Assistant (Extended from [app.py](file:///e:/NyayaSahaya/NyayaSahaya-bot/app.py))
+
+**Current capability:**
+```python
+# Your existing ConversationalRetrievalChain
+qa = ConversationalRetrievalChain.from_llm(
+    llm=llm,
+    retriever=db_retriever,
+    memory=memory,
+    combine_docs_chain_kwargs={"prompt": legal_prompt},
+)
+```
+
+**LexNet enhancement — add clause-level analysis:**
+```python
+# New: Clause-level document analysis
+class ClauseAnalyzer:
+    def analyze_contract(self, document_text):
+        """
+        Break document into clauses, analyze each for:
+        - Risk level (HIGH / MEDIUM / LOW)
+        - Plain-language explanation
+        - Relevant statutes
+        - Compliance flags
+        """
+        clauses = self.extract_clauses(document_text)
+        analysis = []
+        for clause in clauses:
+            result = self.qa.invoke({
+                "question": f"Analyze this legal clause for risks and compliance: {clause}"
+            })
+            analysis.append({
+                "clause_text": clause,
+                "risk_level": self.classify_risk(result),
+                "explanation": result["answer"],
+                "compliance_flags": self.check_compliance(clause)
+            })
+        return analysis
+```
+
+#### b) Contract Risk Detection (NEW)
+
+```python
+class ContractRiskDetector:
+    """Scans uploaded contracts for:
+    - Missing standard clauses (force majeure, termination, dispute resolution)
+    - One-sided/risky terms
+    - Jurisdiction conflicts (Indian vs foreign law)
+    - Non-compete overreach
+    """
+    
+    REQUIRED_CLAUSES = [
+        "indemnification", "termination", "force_majeure",
+        "dispute_resolution", "confidentiality", "governing_law"
+    ]
+    
+    def detect_risks(self, contract_text):
+        missing = self.find_missing_clauses(contract_text)
+        risky_terms = self.flag_risky_language(contract_text)
+        jurisdiction = self.check_jurisdiction(contract_text)
+        return RiskReport(missing, risky_terms, jurisdiction)
+```
+
+#### c) Compliance Engine (NEW)
+
+```python
+class ComplianceEngine:
+    """Checks documents against:
+    - DPDP Act 2023 (India's data protection law)
+    - GDPR (if cross-border)
+    - BNS 2023 (Bharatiya Nyaya Sanhita — replaced IPC)
+    - IT Act 2000
+    - Indian Contract Act 1872
+    """
+    
+    def check_compliance(self, document, jurisdiction="IN"):
+        flags = []
+        if self.contains_personal_data(document):
+            flags.extend(self.check_dpdp(document))
+        if jurisdiction != "IN":
+            flags.extend(self.check_cross_border(document, jurisdiction))
+        return ComplianceReport(flags)
+```
+
+### Layer 2: Document Network (NEW — CS Student 2)
+
+#### API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/documents/upload` | Upload document with TLN-signed metadata |
+| `GET` | `/api/documents/{id}` | Retrieve document + full audit trail |
+| `POST` | `/api/documents/{id}/verify` | Verify document integrity against hash registry |
+| `GET` | `/api/documents/{id}/history` | Get version history and all signatories |
+| `POST` | `/api/documents/{id}/sign` | Sign document (requires TLN authentication) |
+| `POST` | `/api/documents/{id}/share` | Share document with another institution |
+| `GET` | `/api/compliance/check/{id}` | Run compliance check on document |
+| `POST` | `/api/chat` | **Existing** — RAG chatbot endpoint |
+| `POST` | `/api/summarize` | Summarize uploaded document |
+| `POST` | `/api/generate` | Generate legal document from template |
+
+#### Document Metadata Schema
+
+```json
+{
+    "document_id": "DOC-2026-00001",
+    "title": "Rental Agreement — Rahul Kumar ↔ Priya Sharma",
+    "type": "rental_agreement",
+    "version": 3,
+    "created_at": "2026-03-04T17:30:00+05:30",
+    "created_by": "USR-2024-0042",
+    "jurisdiction": "Karnataka, India",
+    "status": "signed",
+    "hash": "sha256:a3f2b8c1d4e5f6...",
+    "signatures": [
+        {
+            "user_id": "USR-2024-0042",
+            "node_id": "TLN-BLR-001",
+            "timestamp": "2026-03-04T17:35:00+05:30",
+            "fingerprint_verified": true,
+            "ecdsa_signature": "3045022100..."
+        }
+    ],
+    "compliance_tags": ["DPDP_COMPLIANT", "RERA_APPLICABLE"],
+    "ai_analysis": {
+        "risk_level": "LOW",
+        "missing_clauses": [],
+        "summary": "Standard residential rental agreement with..."
+    }
+}
+```
+
+### Layer 3: Frontend Dashboard (Extended from [App.jsx](file:///e:/NyayaSahaya/src/App.jsx))
+
+Your current React app with Vite gets new routes:
+
+```jsx
+// Extended from your existing App.jsx
+<Routes>
+    {/* Existing Routes */}
+    <Route path="/" element={<Home />} />
+    <Route path="/chatbot" element={<Chatbot />} />
+    <Route path="/doc-generator" element={<DocGenerator />} />
+    <Route path="/doc-summariser" element={<DocSummariser />} />
+    
+    {/* NEW LexNet Routes */}
+    <Route path="/dashboard" element={<LexNetDashboard />} />
+    <Route path="/documents" element={<DocumentNetwork />} />
+    <Route path="/verify" element={<DocumentVerifier />} />
+    <Route path="/compliance" element={<ComplianceChecker />} />
+    <Route path="/network" element={<NodeNetwork />} />
+    <Route path="/risk-analysis" element={<ContractRiskAnalysis />} />
+</Routes>
+```
+
+---
+
+## 8. Real-World Usage Story <a name="usage-story"></a>
+
+![The LexNet user journey — from document creation to verified signing](C:\Users\sumad\.gemini\antigravity\brain\5e571daa-4df7-41a7-9da8-f664d49b6413\user_story_1772626929964.png)
+
+### Story: Rahul Rents a House in Bangalore
+
+> This story demonstrates the complete LexNet workflow from the perspective of real users.
+
+---
+
+**Chapter 1: The Agreement**
+
+Rahul, a 24-year-old software engineer, finds a flat in Koramangala. The landlord, Mr. Venkatesh, agrees on ₹25,000/month rent.
+
+Instead of downloading a random template from the internet, Mr. Venkatesh opens **LexNet** on his laptop. He navigates to the **Document Generator** (your existing tool, enhanced):
+
+```
+Selected: Rental Agreement
+Landlord: Venkatesh Rao
+Tenant: Rahul Kumar
+Monthly Rent: ₹25,000
+Security Deposit: ₹1,00,000
+Duration: 11 months
+Location: Koramangala, Bangalore
+```
+
+The system generates a professional rental agreement in 30 seconds — complete with all legally required clauses under the **Karnataka Rent Control Act**.
+
+---
+
+**Chapter 2: Understanding the Fine Print**
+
+Rahul receives the agreement link. He's not a lawyer. He opens the document in LexNet and clicks **"Explain This Document"**.
+
+The **RAG Legal Assistant** (your existing chatbot) kicks in:
+
+> 🤖 **NyayaSahaya AI:**
+> *"Here's a plain-language summary of your rental agreement:*
+> 
+> *• **Clause 4 (Lock-In Period):** You cannot leave before 6 months. If you do, you forfeit your security deposit.*
+> 
+> *• **Clause 7 (Maintenance):** You are responsible for repairs under ₹5,000. Above that, the landlord pays.*
+> 
+> *• **Clause 12 (Termination):** Either party must give 2 months written notice before ending the agreement.*
+> 
+> *• ⚠️ **Risk Flag:** Clause 9 allows the landlord to increase rent by 15% annually. The Karnataka Rent Control Act caps annual increases at 10% for agreements under ₹10,000/month, but your rent is above this threshold, so no cap applies.*
+> 
+> *• ✅ **Compliance:** This agreement is compliant with RERA and DPDP Act requirements."*
+
+Rahul now understands every clause. No lawyer needed.
+
+---
+
+**Chapter 3: The Signing**
+
+Both parties meet at a **local legal services center** that has a **Trusted Legal Node** installed.
+
+Here's what happens:
+
+1. **Mr. Venkatesh** places his thumb on the **fingerprint scanner**. The OLED display shows: `IDENTITY VERIFIED ✓`
+
+2. **Rahul** taps his **Aadhaar-linked smart card** on the RFID reader. The LED strip glows green.
+
+3. The TLN computes the **SHA-256 hash** of the rental agreement.
+
+4. The **ATECC608A secure chip** generates an **ECDSA digital signature** using the hardware private key.
+
+5. Metadata packet is created:
+   ```
+   Document: Rental_Agreement_2026_00042
+   Hash: sha256:7f83b1657ff1fc53b92dc18148a1d65d...
+   Signer 1: Venkatesh Rao (Fingerprint: 97% match)
+   Signer 2: Rahul Kumar (Smart Card: VERIFIED)
+   Timestamp: 2026-03-04T17:35:00+05:30 (RTC)
+   Node: TLN-BLR-001
+   Signature: 3045022100ab3f...
+   ```
+
+6. This is uploaded to the **LexNet Document Network**. Both parties receive a confirmation with a **verification QR code**.
+
+---
+
+**Chapter 4: The Dispute (6 Months Later)**
+
+Mr. Venkatesh claims Rahul agreed to a 20% annual rent increase. Rahul disagrees.
+
+Rahul opens **LexNet → Verify** and enters the document ID.
+
+The system:
+1. Retrieves the original document hash from the network
+2. Compares it against the current document
+3. Checks the hardware audit log from TLN-BLR-001
+4. Verifies the ECDSA signatures
+
+**Result:**
+> ✅ **Document Integrity: VERIFIED**
+> 
+> The document has not been modified since signing.
+> 
+> Original Clause 9 states: *"Annual rent increase: 15%"*
+> 
+> Signed by both parties on 2026-03-04 at TLN-BLR-001.
+> 
+> Hardware audit log confirms biometric authentication of both signatories.
+
+The dispute is resolved instantly. The judge can verify the document's authenticity independently through the LexNet network.
+
+---
+
+## 9. Team Work Division <a name="team-division"></a>
+
+![LexNet interdisciplinary team structure](C:\Users\sumad\.gemini\antigravity\brain\5e571daa-4df7-41a7-9da8-f664d49b6413\team_structure_1772626946222.png)
+
+### Detailed Role Breakdown
+
+---
+
+### 🔵 CS Student 1 — Legal AI Engine Lead
+
+**Primary Responsibility:** Extend the existing NyayaSahaya AI capabilities
+
+| Deliverable | Description | Base Code |
+|-------------|-------------|-----------|
+| RAG Enhancement | Expand vector database with BNS, DPDP Act, RERA, IT Act documents | [Ingest.py](file:///e:/NyayaSahaya/NyayaSahaya-bot/Ingest.py) |
+| Contract Risk Detector | Build clause extraction + risk classification pipeline | New module |
+| Compliance Engine | Automated regulatory compliance checker | New module |
+| Document Summarizer Upgrade | Structured summaries with risk flags and compliance badges | [DocSummariser.jsx](file:///e:/NyayaSahaya/src/components/DocSummariser.jsx) |
+| Chatbot Enhancement | Context-aware multi-document conversations | [app.py](file:///e:/NyayaSahaya/NyayaSahaya-bot/app.py) |
+
+**Key Technologies:** Python, LangChain, FAISS, InLegalBERT, Mixtral/Llama, spaCy (Legal NER)
+
+---
+
+### 🟣 CS Student 2 — Document Network & Backend Lead
+
+**Primary Responsibility:** Build the networked infrastructure for document management
+
+| Deliverable | Description | Base Code |
+|-------------|-------------|-----------|
+| REST API Gateway | Unified API for all LexNet operations | Extend [app.py](file:///e:/NyayaSahaya/NyayaSahaya-bot/app.py) FastAPI |
+| Document Metadata Store | PostgreSQL schema for documents, users, signatures, audit logs | New |
+| Hash Registry | SHA-256 hash storage + verification system | New |
+| Version Control | Document versioning with diff tracking | New |
+| Dashboard Frontend | React dashboard with document network visualization | Extend [App.jsx](file:///e:/NyayaSahaya/src/App.jsx) |
+| TLN Communication | API endpoints for hardware node integration | New |
+
+**Key Technologies:** FastAPI, PostgreSQL, React, WebSockets, TLS 1.3
+
+---
+
+### 🟢 ECE Student 1 — Secure Hardware Node Lead
+
+**Primary Responsibility:** Design and build the physical TLN device
+
+| Deliverable | Description |
+|-------------|-------------|
+| TLN Hardware Design | Circuit schematic + PCB layout for all components |
+| Secure Element Integration | ATECC608A setup, key provisioning, ECDSA signing |
+| RTC Module | DS3231 integration for tamper-proof timestamps |
+| Enclosure Design | 3D-printed case with proper ventilation and component access |
+| Power Management | USB-C power delivery, UPS backup consideration |
+| Hardware Audit Logger | Append-only log storage on encrypted partition |
+
+**Key Technologies:** Raspberry Pi, ATECC608A (I2C), DS3231, KiCad (schematic), FreeCAD/Fusion360 (enclosure)
+
+---
+
+### 🟡 ECE Student 2 — Biometric & Embedded Firmware Lead
+
+**Primary Responsibility:** Implement biometric authentication and embedded firmware
+
+| Deliverable | Description |
+|-------------|-------------|
+| Fingerprint Module | R307 sensor integration — enrollment, matching, template storage |
+| RFID/NFC Reader | RC522 integration for smart card authentication |
+| Camera Module | Pi Camera v3 — document scanning + OCR pipeline |
+| OLED Display | SSD1306 — status display, verification results, QR codes |
+| LED Status System | WS2812B — visual feedback for authentication states |
+| Embedded Firmware | Python/C service running on RPi — orchestrating all hardware |
+
+**Key Technologies:** Python (RPi.GPIO, smbus2, pyfingerprint), Tesseract OCR, OpenCV
+
+---
+
+### Integration Points (Where CS meets ECE)
+
+```mermaid
+graph LR
+    CS1["CS Student 1<br/>AI Engine"] -->|"AI API calls"| CS2["CS Student 2<br/>Network Backend"]
+    ECE1["ECE Student 1<br/>Hardware Node"] -->|"Hardware specs"| ECE2["ECE Student 2<br/>Firmware"]
+    CS2 -->|"REST API<br/>WebSocket"| ECE2
+    CS1 -->|"OCR text → AI"| ECE2
+    
+    style CS1 fill:#3B82F6,color:#fff
+    style CS2 fill:#8B5CF6,color:#fff
+    style ECE1 fill:#10B981,color:#fff
+    style ECE2 fill:#F59E0B,color:#fff
+```
+
+---
+
+## 10. Implementation Timeline <a name="timeline"></a>
+
+### 16-Week Project Timeline
+
+| Week | CS Student 1 | CS Student 2 | ECE Student 1 | ECE Student 2 | Milestone |
+|------|-------------|-------------|---------------|---------------|-----------|
+| **1-2** | Literature review: Legal NLP, RAG architectures | Literature review: Document networks, PKI | Component procurement, hardware architecture design | Sensor datasheets study, firmware architecture | **📄 Project Proposal Submitted** |
+| **3-4** | Expand FAISS DB with BNS, DPDP Act docs | Set up PostgreSQL schema, FastAPI project | Raspberry Pi setup, ATECC608A wiring | R307 fingerprint enrollment/matching prototype | **🔧 Development Environment Ready** |
+| **5-6** | Contract risk detection module v1 | Document upload + hash registry API | ATECC608A ECDSA signing working | RC522 RFID authentication working | **🧪 Individual Component Demos** |
+| **7-8** | Compliance engine v1 (DPDP + Contract Act) | Document verification + version tracking | DS3231 RTC + audit logger | Camera scanning + Tesseract OCR | **🔗 Component Integration Begins** |
+| **9-10** | Enhanced summarizer with risk badges | Dashboard frontend — document network view | Full TLN hardware assembly | Unified firmware — all sensors orchestrated | **🖥 First End-to-End Demo** |
+| **11-12** | Multi-document RAG conversations | Share/sign workflow via API | Enclosure design and 3D printing | OLED + LED status display system | **📊 Mid-Review Presentation** |
+| **13-14** | Performance optimization, edge cases | Security hardening, load testing | Hardware stress testing, thermal analysis | End-to-end firmware testing | **🧪 Testing & Bug Fixes** |
+| **15-16** | Documentation, research paper draft | API documentation, demo video | Hardware documentation, circuit diagrams | Integration testing, demo preparation | **🎓 Final Submission + Demo** |
+
+---
+
+## 11. Research Contributions <a name="research-contributions"></a>
+
+### Why This Project is Research-Grade
+
+| Aspect | Research Contribution |
+|--------|----------------------|
+| **Legal NLP** | Domain-specific RAG with InLegalBERT for Indian legal corpus — clause-level analysis goes beyond simple summarization |
+| **Hardware-Anchored Trust** | Using TPM-class secure elements (ATECC608A) for legal document signing is a novel application in the Indian legal tech space |
+| **Compliance Automation** | Automated DPDP Act compliance checking for legal documents — no existing tool does this comprehensively |
+| **Biometric + Crypto Fusion** | Combining biometric authentication with hardware cryptographic signing creates a multi-factor trust model |
+| **Distributed Legal Network** | Document metadata network with hardware-signed integrity proofs — a step toward standardized legal document infrastructure |
+
+### Potential Paper Titles
+
+1. *"LexNet: A Hardware-Anchored Intelligent Network for Trusted Legal Document Operations"*
+2. *"Integrating Biometric Authentication with Cryptographic Hardware for Secure Legal Document Signing"*
+3. *"Domain-Specific RAG with Compliance-Aware Analysis for Indian Legal Documents"*
+
+### Target Conferences/Journals
+
+| Venue | Focus | Fit |
+|-------|-------|-----|
+| IEEE INDICON | Indian technology applications | ⭐⭐⭐⭐⭐ |
+| ACM COMPUTE | Computing for developing regions | ⭐⭐⭐⭐ |
+| IEEE CONECCT | Electronics & CS, Bangalore | ⭐⭐⭐⭐⭐ |
+| ICLR Workshop on AI for Social Good | AI applications | ⭐⭐⭐ |
+| Springer LNCS (Legal Informatics) | Legal technology research | ⭐⭐⭐⭐ |
+
+---
+
+## 12. Hardware Bill of Materials & Cost Estimate <a name="hardware-bom"></a>
+
+### Single TLN Unit — Component List
+
+| # | Component | Model | Interface | Quantity | Unit Price (₹) | Total (₹) |
+|---|-----------|-------|-----------|----------|----------------|------------|
+| 1 | Single Board Computer | Raspberry Pi 4 Model B (8GB) | — | 1 | ₹6,500 | ₹6,500 |
+| 2 | MicroSD Card | SanDisk 64GB Class 10 | — | 1 | ₹600 | ₹600 |
+| 3 | Fingerprint Sensor | R307 Optical | UART | 1 | ₹1,200 | ₹1,200 |
+| 4 | RFID/NFC Reader | RC522 MFRC522 | SPI | 1 | ₹150 | ₹150 |
+| 5 | RFID Cards/Tags | MIFARE Classic 1K | — | 5 | ₹30 | ₹150 |
+| 6 | Secure Element | ATECC608A Breakout | I2C | 1 | ₹800 | ₹800 |
+| 7 | Real-Time Clock | DS3231 Module | I2C | 1 | ₹250 | ₹250 |
+| 8 | Camera Module | Raspberry Pi Camera v3 | CSI | 1 | ₹2,800 | ₹2,800 |
+| 9 | OLED Display | 0.96" SSD1306 128×64 | I2C | 1 | ₹200 | ₹200 |
+| 10 | LED Strip | WS2812B (10 LEDs) | GPIO | 1 | ₹150 | ₹150 |
+| 11 | USB-C Power Supply | Official RPi 5V/3A | — | 1 | ₹500 | ₹500 |
+| 12 | Breadboard + Jumpers | — | — | 1 | ₹200 | ₹200 |
+| 13 | Enclosure | 3D Printed ABS | — | 1 | ₹500 | ₹500 |
+| 14 | Miscellaneous | Wires, screws, standoffs | — | — | ₹300 | ₹300 |
+
+### Cost Summary
+
+| Item | Cost |
+|------|------|
+| **Hardware (Single TLN)** | **₹14,300** |
+| Software (Open Source Stack) | ₹0 |
+| Cloud Hosting (Development) | ₹0 (localhost) |
+| 3D Printing (if outsourced) | ~₹500 |
+| **Total Project Cost** | **~₹15,000** |
+
+> [!TIP]
+> **Budget-friendly alternative:** If the ATECC608A is hard to source, use software-based ECDSA with Python's `cryptography` library as a prototype, and document that production systems should use hardware secure elements. This reduces the cost by ₹800 and still demonstrates the concept.
+
+---
+
+## 13. Why This Project Wins <a name="why-this-wins"></a>
+
+### For Review Panels & Professors
+
+| Criterion | How LexNet Scores |
+|-----------|-------------------|
+| ✅ **Interdisciplinary** | Deep integration of CS (AI + distributed systems) with ECE (embedded systems + cryptographic hardware + biometrics) |
+| ✅ **Research Novelty** | Hardware-anchored trust for legal documents is an unexplored intersection in Indian legal tech |
+| ✅ **Societal Impact** | Addresses real problems: document fraud, legal illiteracy, compliance gaps |
+| ✅ **Technical Depth** | RAG + knowledge graphs + hardware crypto + biometric fusion + networked systems |
+| ✅ **Practical Utility** | Applicable to courts, law firms, property agreements, hospital consent forms |
+| ✅ **Builds on Prior Work** | Demonstrates academic progression from 3rd semester to research-level |
+| ✅ **Scalable Architecture** | Modular design that could genuinely be deployed at scale |
+| ✅ **Publishable** | Clear research contributions suitable for IEEE/ACM conferences |
+
+### Real-World Users Who Would Benefit
+
+| Sector | Use Case | Volume |
+|--------|----------|--------|
+| 🏛 **Courts** | Case document verification, judgment authenticity | 3 crore+ cases pending |
+| ⚖ **Lawyers** | Contract drafting, risk analysis, compliance checking | 17 lakh+ advocates in India |
+| 🏢 **Companies** | Vendor contracts, NDAs, employment agreements | 1 crore+ registered companies |
+| 🏠 **Property** | Rental agreements, sale deeds, lease documents | 1 crore+ property transactions/year |
+| 🏥 **Healthcare** | Patient consent forms, insurance claims | 10 lakh+ hospitals/clinics |
+
+---
+
+## 📎 Quick Reference: File Mapping
+
+| LexNet Component | Existing File | Action |
+|-----------------|---------------|--------|
+| Legal AI Engine (RAG) | [app.py](file:///e:/NyayaSahaya/NyayaSahaya-bot/app.py) | **Extend** — add risk detection, compliance |
+| Vector Database | [Ingest.py](file:///e:/NyayaSahaya/NyayaSahaya-bot/Ingest.py) | **Extend** — ingest BNS, DPDP, RERA docs |
+| Document Generator | [doc_generator.py](file:///e:/NyayaSahaya/legal_document_generator/doc_generator.py) | **Extend** — add hash signing, rental agreements |
+| Document Summarizer | [DocSummariser.jsx](file:///e:/NyayaSahaya/src/components/DocSummariser.jsx) | **Extend** — add risk badges, compliance flags |
+| Frontend Dashboard | [App.jsx](file:///e:/NyayaSahaya/src/App.jsx) | **Extend** — add new LexNet routes |
+| Document Network API | — | **New** — CS Student 2 builds from scratch |
+| TLN Hardware | — | **New** — ECE Students build from scratch |
+| TLN Firmware | — | **New** — ECE Student 2 builds from scratch |
+
+---
+
+> [!IMPORTANT]
+> ### Next Steps
+> 1. **Get team alignment** — Share this plan with your ECE teammates
+> 2. **Finalize the problem statement** — Use the story from Section 2 as the basis
+> 3. **Order hardware** — Use the BOM in Section 12 (total ~₹15,000)
+> 4. **Set up a shared repo** — Fork your NyayaSahaya repo as `LexNet`
+> 5. **Write the proposal** — Use Sections 1-5 of this plan as the foundation
+> 6. **Start building** — Follow the timeline in Section 10
+
+---
+
+*Plan prepared on March 4, 2026 — Built on the foundations of NyayaSahaya*

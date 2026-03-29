@@ -10,11 +10,6 @@ class Settings:
     VERSION: str = "1.0.0"
     API_PREFIX: str = "/api"
 
-    # Database
-    DATABASE_URL: str = os.getenv(
-        "DATABASE_URL", "sqlite:///./lexnet.db"
-    )
-
     # CORS
     CORS_ORIGINS: list = ["*"]
 
@@ -24,8 +19,8 @@ class Settings:
     # FAISS
     FAISS_DB_PATH: str = os.getenv("FAISS_DB_PATH", "../NyayaSahaya-bot/ipc_embed_db")
 
-    # Document templates
-    REFERENCE_DIR: str = os.getenv("REFERENCE_DIR", "../legal_document_generator/reference")
+    # Document templates (points to backend/template)
+    REFERENCE_DIR: str = os.getenv("REFERENCE_DIR", "template")
 
     # Raspberry Pi hardware node
     RPI_BASE_URL: str = os.getenv("RPI_BASE_URL", "http://localhost:8001")

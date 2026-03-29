@@ -1,109 +1,123 @@
-"""Document Generation API — Ported from Streamlit doc_generator.py into headless REST."""
 import os
-import base64
-from io import BytesIO
-from fastapi import APIRouter
-from fastapi.responses import Response
-from ..config import settings
+import hashlib
+from datetime import datetime
+from fastapi import APIRouter, HTTPException, Response
+import cloudinary.utils
+from app import schemas as s
+from app.services.document_generator import generate_document_from_template
+from app.services.cloudinary_service import cloudinary_service
 
 router = APIRouter()
 
 
-def wrap_text(c, text, max_width):
-    """Break text into lines that fit within max_width."""
-    lines = []
-    line = ""
-    for word in text.split(" "):
-        test_line = line + word + " "
-        if c.stringWidth(test_line, "Helvetica", 12) < max_width:
-            line = test_line
-        else:
-            if line:
-                lines.append(line)
-            line = word + " "
-    if line:
-        lines.append(line)
-    return lines
-
-
-def generate_pdf_from_template(input_data: dict, document_type: str) -> BytesIO | None:
-    """Generate a PDF from a reference template, replacing placeholders with input_data."""
-    try:
-        from reportlab.lib.pagesizes import letter
-        from reportlab.pdfgen import canvas
-    except ImportError:
-        return None
-
-    reference_dir = settings.REFERENCE_DIR
-    template_map = {
-        "Sale Deed": "Sale Deed",
-        "Will": "Will",
-        "Power of Attorney": "Power of Attorney",
-    }
-    template_name = template_map.get(document_type)
-    if not template_name:
-        return None
-
-    template_path = os.path.join(reference_dir, f"{template_name}.txt")
-    if not os.path.exists(template_path):
-        return None
-
-    with open(template_path, "r") as f:
-        template_text = f.read()
-
-    # Replace placeholders
-    for placeholder, value in input_data.items():
-        template_text = template_text.replace(f"{{{placeholder}}}", value)
-
-    # Generate PDF
-    pdf_output = BytesIO()
-    c = canvas.Canvas(pdf_output, pagesize=letter)
-    width, height = letter
-    margin = 40
-    line_height = 14
-    x_pos = margin
-    y_pos = height - margin
-    c.setFont("Helvetica", 12)
-
-    lines = template_text.split("\n")
-    for line in lines:
-        wrapped = wrap_text(c, line, width - 2 * margin)
-        for wl in wrapped:
-            if y_pos <= margin:
-                c.showPage()
-                y_pos = height - margin
-                c.setFont("Helvetica", 12)
-            c.drawString(x_pos, y_pos, wl)
-            y_pos -= line_height
-
-    c.save()
-    pdf_output.seek(0)
-    return pdf_output
-
-
-@router.post("/generate-doc")
-async def generate_document(request: dict):
-    """Generate a legal document PDF. Returns raw PDF bytes."""
-    document_type = request.get("document_type", "")
-    data = request.get("data", {})
+@router.post("/generate-doc", response_model=s.DocumentGenerateResponse)
+async def generate_document(request: s.DocumentGenerateRequest):
+    """Generate a legal document PDF, upload to Cloudinary, and return info."""
+    document_type = request.document_type
+    data = request.data
 
     if not document_type:
-        return {"success": False, "message": "document_type is required"}
+        return s.DocumentGenerateResponse(success=False, filename="", message="document_type is required")
 
-    pdf = generate_pdf_from_template(data, document_type)
-    if pdf:
-        return Response(
-            content=pdf.read(),
-            media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="{document_type}.pdf"'},
+    pdf_io = generate_document_from_template(document_type, data)
+    
+    if not pdf_io:
+        return s.DocumentGenerateResponse(
+            success=False,
+            filename="",
+            message="Error generating document or template not found"
         )
+        
+    pdf_bytes = pdf_io.read()
+    filename = f"{document_type.replace(' ', '_')}"
+    
+    # Upload to Cloudinary instead of local DB/Disk
+    metadata = {
+        "document_type": document_type,
+        "generated_at": datetime.now().isoformat(),
+        **data
+    }
+    
+    result = cloudinary_service.upload_document(pdf_bytes, filename, metadata)
+    
+    if not result["success"]:
+        raise HTTPException(status_code=500, detail=result["message"])
 
-    # If template not found or reportlab missing, return a mock/demo response
+    # Use the unsigned secure_url from Cloudinary — it doesn't expire
+    # For forced download we use flags="attachment" but without sign_url
+    try:
+        download_url, _ = cloudinary.utils.cloudinary_url(
+            result["public_id"],
+            resource_type="raw",
+            sign_url=False,
+            secure=True,
+            flags="attachment"
+        )
+    except Exception:
+        download_url = result.get("url", "")
+
+    return s.DocumentGenerateResponse(
+        success=True,
+        public_id=result["public_id"],
+        filename=filename + ".pdf",
+        message="Document successfully generated and stored in Cloudinary.",
+        doc_hash=result["doc_hash"],
+        download_url=download_url,
+        cloudinary_url=result["url"],
+    )
+
+@router.get("/documents")
+async def list_documents():
+    """List documents stored in Cloudinary."""
+    docs = cloudinary_service.search_documents()
+    return {"documents": docs}
+
+@router.get("/documents/{public_id}")
+async def get_document(public_id: str):
+    """Retrieve document details from Cloudinary."""
+    # Cloudinary search/resource API returns results with 'public_id'
+    # We replace / with something safe if needed, but FastAPI handles it or we use query params
+    doc = cloudinary_service.get_document_details(public_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return doc
+
+@router.get("/templates/{template_id}")
+async def get_template_text(template_id: str):
+    """Retrieve the raw text and detected placeholders for a template."""
+    # Mapping ID to file name
+    mapping = {
+        "rental": "Rental Agreement",
+        "sale_deed": "Sale Deed",
+        "will": "Will Deed",
+        "power_of_attorney": "Power of Attorney"
+    }
+    
+    name = mapping.get(template_id)
+    if not name:
+        raise HTTPException(status_code=404, detail="Template not found")
+        
+    # Read the extracted .txt file
+    # Ensure extract_templates.py has been run
+    path = os.path.join("template", f"{name}.txt")
+    if not os.path.exists(path):
+        # Try to re-extract or return error
+        raise HTTPException(status_code=404, detail=f"Extracted template text not found at {path}")
+        
+    with open(path, "r", encoding="utf-8") as f:
+        text = f.read()
+        
+    # Safe placeholder detection
+    import re
+    # Match (...) or 3+ underscores
+    found = re.findall(r'\([^)]+\)|_{3,}', text)
+    unique_placeholders = list(set([p.strip() for p in found]))
+    
     return {
-        "success": True,
-        "message": f"Document '{document_type}' generated (demo mode — template or ReportLab not available)",
-        "filename": f"{document_type.replace(' ', '_')}_demo.pdf",
-        "data_received": len(data),
+        "id": template_id,
+        "name": name,
+        "content": text,
+        "placeholders": unique_placeholders
     }
 
 

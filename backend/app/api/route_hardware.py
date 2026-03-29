@@ -6,6 +6,7 @@ frontend always gets a usable response.
 import httpx
 from fastapi import APIRouter
 from app.config import settings
+from app.services.hardware_provider import hardware_provider
 
 router = APIRouter()
 
@@ -34,17 +35,15 @@ async def _proxy_post(path: str, body: dict | None, fallback: dict) -> dict:
 
 @router.get("/hardware/status")
 async def hardware_status():
-    return await _proxy_get("/status", {
-        "device_id": "TLN-BLR-001", "status": "online", "rfid": "ACTIVE",
-        "tpm": "ENCRYPTED", "hsm_integrity": "VERIFIED",
-    })
+    status = await hardware_provider.get_status()
+    # Still attempt to proxy if RPi is theoretically available, but for our mock, we just return the provider status
+    return status
 
 
 @router.post("/hardware/authenticate")
 async def authenticate():
-    return await _proxy_post("/biometric/authenticate", None, {
-        "device_id": "TLN-BLR-001", "status": "authenticated", "confidence": 0.9876,
-    })
+    return await hardware_provider.request_biometric_scan(user_id=1) # Hardcoded for now
+
 
 
 @router.get("/hardware/heartbeat")

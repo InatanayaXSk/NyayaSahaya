@@ -21,9 +21,12 @@ class DocumentGenerateRequest(BaseModel):
 
 class DocumentGenerateResponse(BaseModel):
     success: bool
-    document_id: Optional[int] = None
+    public_id: Optional[str] = None
     filename: str
     message: str
+    doc_hash: Optional[str] = None
+    download_url: Optional[str] = None
+    cloudinary_url: Optional[str] = None
 
 
 # --- Hardware ---
@@ -44,7 +47,7 @@ class HardwareAuthResponse(BaseModel):
 
 # --- Crypto ---
 class SigningRequest(BaseModel):
-    document_id: int
+    document_id: str
     user_id: str
 
 

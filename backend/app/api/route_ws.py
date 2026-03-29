@@ -6,6 +6,7 @@ import hashlib
 import time
 from datetime import datetime, timezone
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from app.services.hardware_provider import hardware_provider
 
 router = APIRouter()
 
@@ -41,13 +42,19 @@ async def websocket_hardware(websocket: WebSocket):
     """WebSocket endpoint for streaming hardware events."""
     await websocket.accept()
     clients.append(websocket)
+    
+    queue = asyncio.Queue()
+    await hardware_provider.subscribe(queue)
+    
     try:
         while True:
-            event = await generate_mock_event()
+            # Wait for event from hardware provider
+            event = await queue.get()
             await websocket.send_json(event)
-            await asyncio.sleep(random.uniform(1.5, 4.0))
     except WebSocketDisconnect:
         clients.remove(websocket)
     except Exception:
         if websocket in clients:
             clients.remove(websocket)
+    finally:
+        hardware_provider.unsubscribe(queue)

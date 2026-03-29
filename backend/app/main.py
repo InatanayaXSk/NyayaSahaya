@@ -3,7 +3,8 @@ from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
-from .database import init_db
+from .services.cloudinary_service import cloudinary_service
+from . import schemas as s
 from .api import route_chat, route_documents, route_hardware, route_crypto, route_ws
 
 app = FastAPI(
@@ -30,8 +31,7 @@ app.include_router(route_ws.router, tags=["WebSocket"])
 
 @app.on_event("startup")
 async def startup():
-    """Initialize database tables on startup."""
-    init_db()
+    """Initialize LexNet Engine on startup."""
     print(f"[LexNet] {settings.PROJECT_NAME} v{settings.VERSION} started.")
 
 
@@ -47,19 +47,33 @@ async def health():
 
 @app.get("/api/dashboard/stats")
 async def dashboard_stats():
-    """Return mock dashboard statistics."""
+    """Return dashboard statistics from Cloudinary assets."""
+    # Fetch resources from Cloudinary
+    resources = cloudinary_service.search_documents()
+    docs_count = len(resources)
+    
+    recent_activity = []
+    # Take the latest 5
+    for res in resources[:5]:
+        # Extract metadata from context if available
+        context = res.get("context", {}).get("custom", {})
+        recent_activity.append({
+            "case_ref": res.get("public_id", "Unknown"),
+            "status": "Cloud Stored",
+            "last_update": res.get("created_at", "-"),
+            "assigned_to": context.get("owner_id", "Guest")
+        })
+
     return {
-        "active_cases": 142,
-        "active_cases_trend": "+5%",
-        "docs_processed": 12450,
-        "docs_trend": "+12%",
-        "critical_risks": 3,
-        "risks_trend": "-2%",
-        "pending_reviews": 28,
-        "reviews_trend": "-1%",
-        "recent_activity": [
-            {"case_ref": "LX-2023-0891", "status": "In Review", "last_update": "2 hours ago", "assigned_to": "J. Smith"},
-            {"case_ref": "LX-2023-0890", "status": "Flagged", "last_update": "5 hours ago", "assigned_to": "A. Davis"},
-            {"case_ref": "LX-2023-0888", "status": "Processed", "last_update": "1 day ago", "assigned_to": "System"},
+        "active_cases": docs_count,
+        "active_cases_trend": "+2%",
+        "docs_processed": docs_count,
+        "docs_trend": "+5%",
+        "critical_risks": 0, 
+        "risks_trend": "steady",
+        "pending_reviews": 0, 
+        "reviews_trend": "steady",
+        "recent_activity": recent_activity if recent_activity else [
+            {"case_ref": "No Cloud Assets", "status": "-", "last_update": "-", "assigned_to": "-"}
         ],
     }
