@@ -59,6 +59,20 @@ async def chat(request: dict):
     
     return {"answer": answer}
 
+@router.post("/chat/document")
+async def chat_document(request: dict):
+    """Chat with the context of a specific Cloudinary document."""
+    question = request.get("question", "").strip()
+    public_id = request.get("public_id")
+    url = request.get("url")
+    history = request.get("history", []) # Optional chat history
+
+    if not question or not public_id or not url:
+        return {"error": "question, public_id, and url are required"}
+
+    answer = ai_analyzer.chat_with_doc(public_id, url, question, history)
+    return {"answer": answer}
+
 @router.post("/analyze-doc")
 async def analyze_document(request: dict):
     """Endpoint to analyze a generated or uploaded document."""

@@ -6,8 +6,22 @@ import cloudinary.utils
 from app import schemas as s
 from app.services.document_generator import generate_document_from_template
 from app.services.cloudinary_service import cloudinary_service
+from app.services.ai_analyzer import ai_analyzer
 
 router = APIRouter()
+
+
+@router.post("/analyze")
+async def analyze_document(request: dict):
+    """Analyze a document from Cloudinary."""
+    public_id = request.get("public_id")
+    url = request.get("url")
+    
+    if not public_id or not url:
+        raise HTTPException(status_code=400, detail="public_id and url are required")
+        
+    analysis = ai_analyzer.analyze_cloudinary_doc(public_id, url)
+    return analysis
 
 
 @router.post("/generate-doc", response_model=s.DocumentGenerateResponse)

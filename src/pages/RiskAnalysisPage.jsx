@@ -1,164 +1,290 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
-const clauses = [
-    { id: 1, section: 'Section 4.2', title: 'Indemnification Scope', risk: 'High Risk', riskColor: 'risk-high', excerpt: '"...unlimited liability for indirect damages including loss of profits..."', active: true },
-    { id: 2, section: 'Section 8.1', title: 'Data Processing', risk: 'Medium Risk', riskColor: 'risk-med', excerpt: '"Entity shall process personal data in accordance with internal policies..."' },
-    { id: 3, section: 'Section 1.4', title: 'Term and Termination', risk: 'Safe', riskColor: 'risk-safe', excerpt: '"Agreement remains valid for 36 months unless terminated with 90-day notice..."' },
-    { id: 4, section: 'Section 12.3', title: 'Arbitration Seat', risk: 'High Risk', riskColor: 'risk-high', excerpt: '"Any dispute shall be governed by laws outside of jurisdiction..."' },
-];
+const API_BASE = "http://localhost:8000";
 
 export default function RiskAnalysisPage() {
+    const [documents, setDocuments] = useState([]);
+    const [selectedDoc, setSelectedDoc] = useState(null);
+    const [analysis, setAnalysis] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const [activeClause, setActiveClause] = useState(null);
+
+    useEffect(() => {
+        fetchDocuments();
+    }, []);
+
+    const fetchDocuments = async () => {
+        try {
+            const resp = await fetch(`${API_BASE}/api/documents`);
+            const data = await resp.json();
+            setDocuments(data.documents || []);
+        } catch (err) {
+            console.error("Failed to fetch documents:", err);
+        }
+    };
+
+    const handleSelectDoc = async (doc) => {
+        setSelectedDoc(doc);
+        setLoading(true);
+        setAnalysis(null);
+        setError(null);
+        setActiveClause(null);
+        try {
+            const resp = await fetch(`${API_BASE}/api/analyze`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ public_id: doc.public_id, url: doc.secure_url || doc.url })
+            });
+            const data = await resp.json();
+            
+            if (data.error) {
+                setError(data.error);
+            } else {
+                setAnalysis(data);
+                if (data.clauses && data.clauses.length > 0) {
+                    setActiveClause(data.clauses[0]);
+                }
+            }
+        } catch (err) {
+            console.error("Analysis failed:", err);
+            setError("CONEX_FAIL: Failed to reach Neural Cluster. Please retry.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
-        <div className="flex flex-col min-h-[calc(100vh-56px)]">
-            {/* Sub-header */}
-            <div className="px-6 py-4 border-b border-primary/10 bg-white">
-                <div className="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex items-center gap-2 text-sm">
-                        <span className="text-slate-400">Contracts</span>
-                        <span className="material-symbols-outlined text-sm text-slate-300">chevron_right</span>
-                        <span className="text-slate-400">Real Estate</span>
-                        <span className="material-symbols-outlined text-sm text-slate-300">chevron_right</span>
-                        <span className="font-medium text-slate-900">Master_Lease_v04_2024.pdf</span>
+        <div className="flex flex-col lg:flex-row h-[calc(100vh-80px)] bg-[#0f0f1a] text-slate-200 overflow-hidden">
+            {/* Sidebar: The "Risk Vault" (Standardized Width) */}
+            <aside className="w-full lg:w-80 border-r border-slate-800 bg-[#0a0a14] flex flex-col shrink-0">
+                <div className="p-6 border-b border-slate-800 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-rose-500/20 flex items-center justify-center border border-rose-500/30">
+                        <span className="material-symbols-outlined text-rose-500 text-xl">security</span>
                     </div>
-                    <div className="flex gap-2">
-                        <button className="flex items-center gap-2 px-4 py-1.5 rounded-lg border border-primary/30 text-slate-600 text-sm font-medium hover:bg-slate-50">
-                            <span className="material-symbols-outlined text-sm">download</span> Export Report
-                        </button>
-                        <button className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-primary text-slate-900 text-sm font-bold shadow-sm hover:opacity-90">
-                            <span className="material-symbols-outlined text-sm">share</span> Share Review
-                        </button>
-                    </div>
+                    <h2 className="font-black text-xs uppercase tracking-[0.2em] text-slate-400">Risk Vault</h2>
                 </div>
-            </div>
-
-            {/* 3-Column Layout */}
-            <div className="flex-1 max-w-[1600px] mx-auto w-full grid grid-cols-12 gap-0 overflow-hidden">
-                {/* Left: Clause List */}
-                <aside className="col-span-3 border-r border-primary/10 bg-white/50 flex flex-col overflow-y-auto max-h-[calc(100vh-160px)]">
-                    <div className="p-4 border-b border-primary/10 flex items-center justify-between">
-                        <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Clauses Found (12)</h3>
-                        <span className="material-symbols-outlined text-slate-400 cursor-pointer">filter_list</span>
-                    </div>
-                    <div className="flex-1 overflow-y-auto">
-                        {clauses.map(c => (
-                            <div key={c.id} className={`p-4 cursor-pointer hover:bg-primary/20 transition-all border-b border-primary/5 ${c.active ? 'bg-primary/10 border-l-4 border-l-' + c.riskColor : ''}`}>
-                                <div className="flex justify-between items-start mb-1">
-                                    <span className={`text-[10px] font-bold uppercase tracking-tighter px-1.5 py-0.5 rounded ${c.riskColor === 'risk-high' ? 'text-risk-high bg-risk-high/10' :
-                                            c.riskColor === 'risk-med' ? 'text-risk-med bg-risk-med/10' :
-                                                'text-risk-safe bg-risk-safe/10'
-                                        }`}>{c.risk}</span>
-                                    <span className="text-xs text-slate-400">{c.section}</span>
-                                </div>
-                                <h4 className="font-semibold text-slate-900 text-sm mb-1">{c.title}</h4>
-                                <p className="text-xs text-slate-500 line-clamp-2 italic">{c.excerpt}</p>
+                
+                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-2">
+                    {documents.map((doc, i) => (
+                        <button
+                            key={i}
+                            onClick={() => handleSelectDoc(doc)}
+                            className={`w-full text-left p-4 rounded-xl border transition-all group relative overflow-hidden ${
+                                selectedDoc?.public_id === doc.public_id
+                                    ? 'bg-rose-500/10 border-rose-500/50 text-white shadow-[0_0_20px_rgba(239,68,68,0.1)]'
+                                    : 'bg-transparent border-slate-800 text-slate-500 hover:border-slate-600 hover:bg-slate-800/30'
+                            }`}
+                        >
+                            <div className="flex flex-col gap-1 relative z-10">
+                                <span className={`text-[9px] font-black uppercase tracking-widest ${selectedDoc?.public_id === doc.public_id ? 'text-rose-500' : 'text-slate-600'}`}>Secure Asset</span>
+                                <span className="text-xs font-bold truncate">{doc.public_id.split('/').pop()}</span>
                             </div>
-                        ))}
-                    </div>
-                </aside>
-
-                {/* Center: Clause Editor */}
-                <section className="col-span-6 bg-white flex flex-col p-8 overflow-y-auto max-h-[calc(100vh-160px)]">
-                    <div className="max-w-3xl mx-auto w-full bg-white shadow-xl rounded-lg p-12 border border-primary/10">
-                        <div className="mb-8 pb-4 border-b border-slate-100">
-                            <h2 className="text-2xl font-bold text-slate-900 mb-2">Section 4.2 Indemnification</h2>
+                            {selectedDoc?.public_id === doc.public_id && (
+                                <div className="absolute right-0 top-0 h-full w-1 bg-rose-500"></div>
+                            )}
+                        </button>
+                    ))}
+                    {documents.length === 0 && (
+                        <div className="text-center py-12 px-6">
+                            <span className="material-symbols-outlined text-slate-700 text-4xl mb-4">folder_off</span>
+                            <p className="text-[10px] uppercase font-black text-slate-600 tracking-widest leading-relaxed">No vaulted assets found.</p>
                         </div>
-                        <div className="prose max-w-none text-slate-700 leading-relaxed space-y-4">
-                            <p>The Tenant shall indemnify, defend, and hold harmless the Landlord from and against any and all claims, demands, causes of action, losses, liabilities, damages, costs, and expenses (including reasonable attorneys' fees) arising out of or in connection with the Tenant's use or occupancy of the Premises.</p>
-                            <p className="bg-risk-high/5 p-4 rounded border-l-4 border-risk-high relative">
-                                <mark className="bg-risk-high/20 text-slate-900 px-1">Tenant agrees that its liability under this section shall be unlimited and shall include liability for indirect, incidental, or consequential damages, including but not limited to loss of profits, business interruption, or loss of data, regardless of the cause of action.</mark>
+                    )}
+                </div>
+            </aside>
+
+            {/* Main Content Area */}
+            <main className="flex-1 flex flex-col overflow-hidden bg-slate-900/40 relative">
+                {/* Header Sub-bar */}
+                <div className="px-8 py-4 border-b border-slate-800/50 glass-nav-dark flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest">
+                        <span className="text-slate-500">Compliance Vault</span>
+                        <span className="material-symbols-outlined text-sm text-slate-700">chevron_right</span>
+                        <span className="text-white">{selectedDoc ? selectedDoc.public_id.split('/').pop() : 'Direct Neural Scan'}</span>
+                    </div>
+                    {selectedDoc && !loading && !error && (
+                        <a 
+                            href={selectedDoc.secure_url || selectedDoc.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            download
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/50 border border-slate-700 text-[9px] font-black text-rose-500 uppercase tracking-widest hover:bg-rose-500/10 hover:border-rose-500/40 transition-all shadow-xl"
+                        >
+                            <span className="material-symbols-outlined text-sm">cloud_download</span>
+                            Download Asset
+                        </a>
+                    )}
+                    {error && (
+                        <div className="flex items-center gap-2 text-[9px] font-black text-rose-500 uppercase tracking-widest bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20">
+                            <span className="material-symbols-outlined text-sm">report</span> Engine Throttled
+                        </div>
+                    )}
+                </div>
+
+                {loading ? (
+                    <div className="flex-1 flex flex-col items-center justify-center p-12">
+                        <div className="w-16 h-16 border-4 border-rose-500/20 border-t-rose-500 rounded-full animate-spin mb-6 shadow-[0_0_20px_rgba(239,68,68,0.3)]"></div>
+                        <h3 className="text-xl font-black text-white animate-pulse tracking-widest uppercase italic">Neural Scanning...</h3>
+                        <p className="text-slate-500 text-[10px] mt-2 font-black uppercase tracking-[0.4em]">Gemini 4.0 Pro Context Engine</p>
+                    </div>
+                ) : error ? (
+                    <div className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-6">
+                        <div className="w-24 h-24 rounded-full border-4 border-rose-500/20 flex items-center justify-center relative">
+                            <span className="material-symbols-outlined text-rose-500 text-6xl">
+                                {error.includes("THROTTLED") ? "hourglass_empty" : error.includes("AUTH") || error.includes("CONFIG") ? "key_off" : "cloud_off"}
+                            </span>
+                        </div>
+                        <div className="space-y-3">
+                            <h2 className="text-3xl font-black text-white tracking-tighter uppercase italic">
+                                {error.includes("THROTTLED") ? "Engine Cooling Down" : "Neural Sync Failed"}
+                            </h2>
+                            <p className="text-slate-500 max-w-sm font-black text-xs uppercase tracking-[0.2em] leading-relaxed mx-auto">
+                                {error.includes("THROTTLED") ? "Neural Cluster is at capacity. Please wait 30 seconds for the next scan cycle." : 
+                                 error.includes("AUTH") ? "Invalid API Configuration. Check backend .env settings." :
+                                 error.includes("DOWNLOAD") ? "Could not access the document from the vault." :
+                                 `System Report: ${error}`}
                             </p>
-                            <p>The Landlord shall notify the Tenant in writing of any claim for which it seeks indemnification promptly after becoming aware of such claim. The Tenant shall have the right to assume the defense of any such claim with counsel of its own choice.</p>
-                        </div>
-                        {/* AI Suggested Fix */}
-                        <div className="mt-12 p-6 bg-primary/5 rounded-xl border border-primary/20 border-dashed">
-                            <div className="flex items-start gap-4">
-                                <div className="bg-primary/20 p-2 rounded-lg text-primary">
-                                    <span className="material-symbols-outlined">auto_fix_high</span>
-                                </div>
-                                <div className="flex-1">
-                                    <h5 className="text-sm font-bold text-primary mb-2 uppercase tracking-wide">LexNet AI Suggested Fix</h5>
-                                    <p className="text-sm text-slate-600 mb-4 italic">"Liability shall be capped at 12 months of annual rent and shall specifically exclude indirect or consequential damages in accordance with standard commercial practices."</p>
-                                    <button className="w-full py-2.5 rounded-lg bg-primary text-slate-900 font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98]">Apply Suggested Fix</button>
-                                </div>
-                            </div>
+                            <button 
+                                onClick={() => handleSelectDoc(selectedDoc)}
+                                className="mt-8 px-6 py-2 rounded-lg bg-rose-600 text-white font-black text-[10px] uppercase tracking-widest hover:bg-rose-500 transition-all active:scale-95"
+                            >
+                                Retry Scanning Sequence
+                            </button>
                         </div>
                     </div>
-                </section>
-
-                {/* Right: Insights */}
-                <aside className="col-span-3 border-l border-primary/10 bg-white/50 flex flex-col overflow-y-auto max-h-[calc(100vh-160px)]">
-                    <div className="p-6 border-b border-primary/10">
-                        <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider mb-4 flex items-center gap-2">
-                            <span className="material-symbols-outlined text-risk-high text-lg">warning</span> Risk Assessment
-                        </h3>
-                        <div className="space-y-6">
-                            <div>
-                                <div className="flex justify-between text-xs mb-1">
-                                    <span className="text-slate-500 font-medium">Compliance Score</span>
-                                    <span className="text-risk-high font-bold">42%</span>
-                                </div>
-                                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                                    <div className="bg-risk-high h-full" style={{ width: '42%' }}></div>
-                                </div>
+                ) : analysis ? (
+                    <div className="flex-1 grid grid-cols-12 overflow-hidden">
+                        {/* Left: Clause Sidebar */}
+                        <aside className="col-span-3 border-r border-slate-800 bg-[#0a0a14]/50 flex flex-col overflow-y-auto">
+                            <div className="p-4 border-b border-slate-800 flex items-center justify-between sticky top-0 bg-[#0a0a14] z-10">
+                                <h3 className="font-black text-slate-500 text-[9px] uppercase tracking-widest">Detected Clauses ({analysis.clauses?.length || 0})</h3>
                             </div>
-                            <div className="space-y-4">
-                                <div className="p-3 bg-white rounded-lg border border-primary/10">
-                                    <h4 className="text-xs font-bold text-slate-900 mb-2">Legal Conflicts</h4>
-                                    <div className="flex flex-wrap gap-2">
-                                        <span className="bg-slate-100 text-[10px] font-bold px-2 py-0.5 rounded text-slate-600">DPDP Act (India)</span>
-                                        <span className="bg-slate-100 text-[10px] font-bold px-2 py-0.5 rounded text-slate-600">RERA Sec 18</span>
-                                        <span className="bg-risk-high/10 text-risk-high text-[10px] font-bold px-2 py-0.5 rounded border border-risk-high/20">Liability Cap Gap</span>
+                            <div className="p-2 space-y-2">
+                                {(analysis.clauses || []).map((c, idx) => (
+                                    <button 
+                                        key={idx} 
+                                        onClick={() => setActiveClause(c)}
+                                        className={`w-full text-left p-4 rounded-xl border transition-all relative ${
+                                            activeClause === c ? 'bg-slate-800/80 border-slate-600 shadow-xl' : 'bg-transparent border-transparent hover:bg-slate-800/30'
+                                        }`}
+                                    >
+                                        <div className="flex justify-between items-start mb-2">
+                                            <span className={`text-[8px] font-black uppercase tracking-[0.2em] px-2 py-0.5 rounded ${
+                                                c.risk_assessment?.includes('High') ? 'text-rose-500 bg-rose-500/10' : 
+                                                c.risk_assessment?.includes('Medium') ? 'text-amber-500 bg-amber-500/10' : 'text-emerald-500 bg-emerald-500/10'
+                                            }`}>{c.risk_assessment}</span>
+                                        </div>
+                                        <h4 className="text-[11px] font-black text-white uppercase tracking-tight truncate">{c.title}</h4>
+                                    </button>
+                                ))}
+                            </div>
+                        </aside>
+
+                        {/* Center: Detailed Clause Viewer */}
+                        <section className="col-span-6 bg-slate-900/50 p-8 overflow-y-auto custom-scrollbar">
+                           {activeClause ? (
+                                <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                                    <div className="space-y-2 border-b border-slate-800 pb-6">
+                                        <div className="flex items-center gap-3 text-[10px] font-black text-rose-500 uppercase tracking-widest">
+                                            <span className="material-symbols-outlined text-sm">gavel</span>
+                                            {activeClause.section}
+                                        </div>
+                                        <h2 className="text-3xl font-black text-white tracking-tighter">{activeClause.title}</h2>
+                                    </div>
+
+                                    <div className="p-8 rounded-3xl bg-[#161726]/80 border border-slate-800 relative group overflow-hidden">
+                                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-rose-500 to-transparent"></div>
+                                        <p className="text-slate-300 text-lg font-medium leading-relaxed italic">"{activeClause.excerpt}"</p>
+                                    </div>
+
+                                    <div className="space-y-4 px-2">
+                                        <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">AI Strategic Explainers</h4>
+                                        <div className="p-6 rounded-2xl bg-rose-500/5 border border-rose-500/10 text-slate-300 text-sm leading-relaxed font-medium">
+                                            {activeClause.risk_assessment} - {activeClause.suggestion ? "AI Mitigation Recommendation included." : "Standard review suggested."}
+                                        </div>
+                                    </div>
+
+                                    <div className="p-8 rounded-3xl bg-slate-800/40 border-2 border-dashed border-slate-700 relative mt-12 overflow-hidden">
+                                        <div className="absolute top-0 right-0 p-4 opacity-10">
+                                            <span className="material-symbols-outlined text-8xl text-white">auto_awesome</span>
+                                        </div>
+                                        <h5 className="text-[10px] font-black text-rose-500 uppercase tracking-[0.4em] mb-4">Recommended Amendment</h5>
+                                        <p className="text-sm text-white font-black italic leading-relaxed mb-6">"{activeClause.suggestion || "Use standard industry defaults for this clause type."}"</p>
+                                        <button className="w-full py-3.5 rounded-xl bg-rose-600 text-white font-black text-xs uppercase tracking-[0.2em] shadow-[0_0_20_rgba(239,68,68,0.3)] hover:scale-[1.02] transition-all active:scale-95">Apply AI Mitigation</button>
                                     </div>
                                 </div>
-                                <div className="space-y-3">
-                                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-widest">Analysis Insights</h4>
-                                    {[
-                                        { icon: 'info', color: 'text-risk-high', title: 'Unconscionability Risk:', text: 'Unlimited liability clauses are often viewed as punitive in many jurisdictions.' },
-                                        { icon: 'rule', color: 'text-risk-med', title: 'Deviation:', text: "This clause deviates 85% from your organization's standard 'Gold Template'." },
-                                        { icon: 'history', color: 'text-risk-safe', title: 'Precedent:', text: 'Similar clauses resulted in 12% higher litigation costs in the FY23 retail portfolio.' },
-                                    ].map((insight, i) => (
-                                        <div key={i} className="flex gap-3">
-                                            <span className={`material-symbols-outlined ${insight.color} text-lg shrink-0`}>{insight.icon}</span>
-                                            <p className="text-xs text-slate-600"><strong className="text-slate-900">{insight.title}</strong> {insight.text}</p>
-                                        </div>
+                           ) : (
+                               <div className="h-full flex flex-col items-center justify-center opacity-30">
+                                   <span className="material-symbols-outlined text-8xl text-slate-500 mb-4">verified</span>
+                                   <p className="font-black uppercase tracking-widest text-[11px]">Neural Audit Idle</p>
+                               </div>
+                           )}
+                        </section>
+
+                        {/* Right: Global Risks */}
+                        <aside className="col-span-3 border-l border-slate-800 bg-[#0a0a14]/50 flex flex-col overflow-y-auto p-8 space-y-10">
+                            <div>
+                                <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-6">Risk Quotient</h3>
+                                <div className="relative pt-1">
+                                    <div className="flex mb-4 items-center justify-between">
+                                        <span className="text-[2rem] font-black text-white italic tracking-tighter">{analysis.compliance_score}%</span>
+                                        <span className="text-[10px] font-black bg-rose-500/20 text-rose-500 px-3 py-1 rounded-full uppercase tracking-tighter">Critical review</span>
+                                    </div>
+                                    <div className="overflow-hidden h-2.5 mb-4 text-xs flex rounded-full bg-slate-800 shadow-inner">
+                                        <div style={{ width: `${analysis.compliance_score}%` }} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-rose-600 transition-all duration-1000"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-6">
+                                <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Statutory Compliance</h3>
+                                <div className="flex flex-wrap gap-2">
+                                    {(analysis.legal_conflicts || []).map((conflict, i) => (
+                                        <span key={i} className="px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 text-[9px] font-black uppercase tracking-widest shadow-xl">{conflict}</span>
                                     ))}
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                    {/* Compliance Tags */}
-                    <div className="p-6">
-                        <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider mb-4">Compliance Tags</h3>
-                        <div className="flex flex-wrap gap-2">
-                            {[
-                                { icon: 'shield', label: 'DPDP Ready', active: true },
-                                { icon: 'apartment', label: 'RERA Compliance' },
-                                { icon: 'gavel', label: 'IBC 2016' },
-                            ].map((tag, i) => (
-                                <div key={i} className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold ${tag.active ? 'bg-primary/20 border border-primary text-slate-700' : 'bg-slate-100 border border-slate-200 text-slate-500'
-                                    }`}>
-                                    <span className="material-symbols-outlined text-sm">{tag.icon}</span> {tag.label}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </aside>
-            </div>
 
-            {/* Footer Status Bar */}
-            <footer className="h-10 border-t border-primary/10 bg-white px-6 flex items-center justify-between text-[10px] uppercase font-bold text-slate-400 tracking-widest">
-                <div className="flex items-center gap-4">
-                    <span className="flex items-center gap-1.5 text-risk-safe">
-                        <span className="w-2 h-2 rounded-full bg-risk-safe"></span> AI ENGINE ONLINE
-                    </span>
-                    <span className="border-l border-slate-200 h-4 mx-2"></span>
-                    <span>MODELS: BERT-L-902, GPT-4O-LEGAL</span>
-                </div>
-                <div className="flex items-center gap-4">
-                    <span>LAST SCAN: 2 MINS AGO</span>
-                    <span>USER: SNR_COUNSEL_01</span>
-                </div>
-            </footer>
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Insights Pipeline</h3>
+                                {[
+                                    { icon: 'bolt', text: 'Section 4.2 deviates from market precedence by 82%.' },
+                                    { icon: 'history', text: 'Similar clauses in FY25 led to 14% litigation overhead.' },
+                                ].map((h, i) => (
+                                    <div key={i} className="p-4 rounded-xl bg-slate-800/30 border border-slate-800 flex gap-3">
+                                        <span className="material-symbols-outlined text-amber-500 text-lg">{h.icon}</span>
+                                        <p className="text-[10px] text-slate-400 font-medium leading-relaxed">{h.text}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </aside>
+                    </div>
+                ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-8 animate-in fade-in duration-1000">
+                         <div className="w-40 h-40 rounded-3xl border-4 border-dashed border-slate-800 flex items-center justify-center rotate-3 hover:rotate-0 transition-all duration-700">
+                            <span className="material-symbols-outlined text-slate-800 text-8xl">fingerprint</span>
+                        </div>
+                        <div className="space-y-4">
+                            <h2 className="text-5xl font-black text-white tracking-tighter italic uppercase">Scanner Idle</h2>
+                            <p className="text-slate-500 max-w-sm font-black text-xs uppercase tracking-[0.2em] leading-relaxed mx-auto">
+                                Select a document from the <span className="text-rose-500">Risk Vault</span> to initiate the neural auditing sequence.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                {/* Status Bar */}
+                <footer className="h-10 border-t border-slate-800 bg-[#0a0a14] px-8 flex items-center justify-between text-[8px] font-black text-slate-600 tracking-[0.4em] uppercase">
+                    <div className="flex items-center gap-6">
+                        <span className="flex items-center gap-2 text-rose-500">
+                            <span className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse"></span> SCANNER ONLINE
+                        </span>
+                        <span>ENGINE: PRO-V1.0</span>
+                    </div>
+                    <span>© NYAYASAHAYA NEURAL NETWORK 2026</span>
+                </footer>
+            </main>
         </div>
     );
 }
