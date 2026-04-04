@@ -13,7 +13,7 @@ export default function Layout({ children }) {
             <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-4 pointer-events-none">
                 {/* Chat Window */}
                 {isChatOpen && (
-                    <div className="pointer-events-auto shadow-2xl rounded-2xl overflow-hidden border border-slate-200/50 bg-white dark:bg-card-dark mb-2 animate-in slide-in-from-bottom-5">
+                    <div className="pointer-events-auto w-[380px] h-[520px] shadow-[0_0_40px_rgba(0,0,0,0.5)] rounded-3xl overflow-hidden border border-slate-700/50 mb-4 animate-in fade-in slide-in-from-bottom-4 duration-300 z-50">
                        <Chatbot />
                     </div>
                 )}

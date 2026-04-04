@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 
 const defaultAuthSteps = [
     { name: 'Initial Handshake', status: 'Waiting...', done: false, active: false },
@@ -77,8 +78,16 @@ export default function HardwareAuthPage() {
         };
     }, []);
 
+    const { token, user } = useAuth();
+
     const triggerAuth = async () => {
-        fetch('http://localhost:8000/api/hardware/authenticate', { method: 'POST' }).catch(console.error);
+        if (!token) return;
+        fetch('http://localhost:8000/api/hardware/authenticate', { 
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        }).catch(console.error);
     };
     return (
         <div className="pt-8 pb-12 px-6 max-w-6xl mx-auto">
@@ -167,20 +176,26 @@ export default function HardwareAuthPage() {
                         </div>
                     </div>
 
-                    {/* Manual Override */}
+                    {/* Manual Override & Actions */}
                     <div className="bg-primary/10 p-6 rounded-2xl border-2 border-primary/20 flex flex-col gap-4">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-primary/40 flex items-center justify-center text-slate-900">
-                                <span className="material-symbols-outlined">help</span>
+                                <span className="material-symbols-outlined">key</span>
                             </div>
                             <div>
-                                <p className="text-xs font-bold leading-tight">Need Access?</p>
-                                <p className="text-[10px] text-slate-600 font-medium">Contact Security Admin</p>
+                                <p className="text-xs font-bold leading-tight">Identity Actions</p>
+                                <p className="text-[10px] text-slate-600 font-medium">Hardware keys loaded</p>
                             </div>
                         </div>
                         <button onClick={triggerAuth} className="w-full bg-primary text-slate-900 font-black text-xs py-3 rounded-xl uppercase tracking-widest shadow-lg shadow-primary/20 hover:brightness-95 transition-all">
                             Simulate Hardware Auth
                         </button>
+                        {user?.role === 'client' && (
+                            <button className="w-full bg-slate-800 text-white font-black text-[10px] py-3 rounded-xl uppercase tracking-widest border border-slate-700 hover:bg-slate-700 transition-all flex items-center justify-center gap-2">
+                                <span className="material-symbols-outlined text-sm">draw</span>
+                                Start Signing Flow
+                            </button>
+                        )}
                     </div>
 
                     {/* Network Load */}

@@ -1,0 +1,13 @@
+RENTAL AGREEMENT
+
+This agreement is made on (Date) between (Landlord Name) and (Tenant Name).
+
+The property is located at (Address).
+
+Term: (Duration).
+
+Rent: (Amount) per month.
+
+Signed,
+(Landlord Signature)
+(Tenant Signature)

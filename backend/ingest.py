@@ -3,51 +3,50 @@ import json
 import faiss
 import numpy as np
 import time
-from google import genai
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
 
-def embed_texts(texts, client):
-    vectors = []
-    print(f"Embedding {len(texts)} chunks...")
-    for text in texts:
-        try:
-            result = client.models.embed_content(
-                model='gemini-embedding-001',
-                contents=text
-            )
-            vectors.append(result.embeddings[0].values)
-            time.sleep(4)  # To avoid 429 Free Tier Rate limit (15 req/min)
-        except Exception as e:
-            print(f"Error embedding text: {e}")
-            # append zero vector as fallback with correct gemini-embedding-001 dimension
-            vectors.append([0.0] * 3072)
-            time.sleep(4)
-            
-    return np.array(vectors, dtype='float32')
+from sentence_transformers import SentenceTransformer
+
+# Load the local embedding model
+EMBED_MODEL_NAME = "all-MiniLM-L6-v2"
+print(f"Loading local embedding model: {EMBED_MODEL_NAME}...")
+embedder = SentenceTransformer(EMBED_MODEL_NAME)
+
+def embed_texts(texts):
+    print(f"Embedding {len(texts)} chunks using local {EMBED_MODEL_NAME}...")
+    try:
+        # SentenceTransformers can batch encode efficiently
+        embeddings = embedder.encode(texts, show_progress_bar=True)
+        return np.array(embeddings, dtype='float32')
+    except Exception as e:
+        print(f"Error embedding texts: {e}")
+        # fallback to 384 dims for all-MiniLM-L6-v2
+        return np.zeros((len(texts), 384), dtype='float32')
+
+def chunk_text(text, max_len=2000):
+    chunks = []
+    paragraphs = text.split('\n')
+    current_chunk = ""
+    for p in paragraphs:
+        if len(current_chunk) + len(p) < max_len:
+            current_chunk += p + '\n'
+        else:
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+            if len(p) > max_len:
+                for i in range(0, len(p), max_len):
+                    chunks.append(p[i:i+max_len])
+                current_chunk = ""
+            else:
+                current_chunk = p + '\n'
+    if current_chunk:
+         chunks.append(current_chunk.strip())
+    return chunks
 
 def ingest():
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        print("Warning: GEMINI_API_KEY not found in environment. Mocking the API for now.")
-        # Create a mock client if there's no API key to allow the demo to run
-        class MockResult:
-            class MockEmbedding:
-                values = list(np.random.rand(3072))
-            embeddings = [MockEmbedding()]
-        
-        class MockModels:
-            def embed_content(self, model, contents):
-                return MockResult()
-        
-        class MockClient:
-            models = MockModels()
-            
-        client = MockClient()
-    else:
-        client = genai.Client()
-
     data_path = os.path.join("data", "data.txt")
     if not os.path.exists(data_path):
         print(f"File {data_path} not found.")
@@ -57,13 +56,17 @@ def ingest():
         content = f.read()
 
     # Simple chunking by paragraph (double newline)
-    chunks = [c.strip() for c in content.split('\n\n') if len(c.strip()) > 10]
+    initial_chunks = [c.strip() for c in content.split('\n\n') if len(c.strip()) > 10]
+    
+    chunks = []
+    for ic in initial_chunks:
+        chunks.extend(chunk_text(ic, max_len=2000))
     
     if not chunks:
         print("No content found to embed.")
         return
 
-    vectors = embed_texts(chunks, client)
+    vectors = embed_texts(chunks)
     
     dimension = vectors.shape[1]
     index = faiss.IndexFlatL2(dimension)
@@ -75,7 +78,7 @@ def ingest():
     with open("faiss_index/chunks.json", "w", encoding="utf-8") as f:
         json.dump(chunks, f, ensure_ascii=False, indent=2)
         
-    print(f"Successfully ingested {len(chunks)} chunks into FAISS index with dimension {dimension}.")
+    print(f"Successfully ingested {len(chunks)} sub-chunks into FAISS index with dimension {dimension}.")
 
 if __name__ == "__main__":
     ingest()

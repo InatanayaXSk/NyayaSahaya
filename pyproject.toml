@@ -1,0 +1,10 @@
+[project]
+name = "nyayasahaya"
+version = "0.1.0"
+description = "Legal Assistant with Ollama & uv"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = []
+
+[tool.uv]
+workspace = { members = ["backend", "legal_document_generator"] }

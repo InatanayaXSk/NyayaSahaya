@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 
 const API_BASE = "http://localhost:8000";
 
@@ -16,13 +17,22 @@ export default function LegalSummaryPage() {
     const [input, setInput] = useState('');
     const [isChatting, setIsChatting] = useState(false);
 
+    const { token } = useAuth();
+
     useEffect(() => {
-        fetchDocuments();
-    }, []);
+        if (token) {
+            fetchDocuments();
+        }
+    }, [token]);
 
     const fetchDocuments = async () => {
+        if (!token) return;
         try {
-            const resp = await fetch(`${API_BASE}/api/documents`);
+            const resp = await fetch(`${API_BASE}/api/documents`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
             const data = await resp.json();
             setDocuments(data.documents || []);
         } catch (err) {
@@ -38,7 +48,10 @@ export default function LegalSummaryPage() {
         try {
             const resp = await fetch(`${API_BASE}/api/analyze`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify({ public_id: doc.public_id, url: doc.secure_url || doc.url })
             });
             const data = await resp.json();
@@ -77,7 +90,10 @@ export default function LegalSummaryPage() {
         try {
             const resp = await fetch(`${API_BASE}/api/chat/document`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify({
                     question: input,
                     public_id: selectedDoc.public_id,

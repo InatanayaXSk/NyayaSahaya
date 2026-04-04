@@ -1,23 +1,35 @@
-"""AI Service for Document Analysis, Summarization, and Legal RAG."""
+"""AI Service for Document Analysis, Summarization, and Legal RAG via Local Ollama."""
 import os
 import json
-import time
 import faiss
-import requests
 import tempfile
+import httpx
 import numpy as np
-from google import genai
-from app.config import settings
+import PyPDF2
+from docling.document_converter import DocumentConverter
+from sqlalchemy import select, update
+from app.models import DocumentLedger, DocumentAnalysis
 
 class AIAnalyzer:
     def __init__(self):
-        self.api_key = os.getenv("GEMINI_API_KEY")
-        self.client = genai.Client(api_key=self.api_key) if self.api_key else None
-        # Valid 2.0-flash model ID
-        self.model_id = "gemini-2.5-flash" 
+        self.generation_model = "gemma-4-E4B" # Doesn't strictly matter for llama.cpp but good for logs
+        self.embedding_model = "all-MiniLM-L6-v2"
+        self.llama_base_url = "http://localhost:8080"
         self.index = None
         self.chunks = []
-        self.file_cache = {} # Mapping public_id -> Gemini File object
+        self.file_cache = {} # Static in-memory cache public_id -> text
+        self.converter = None # Lazy-loaded Singleton Docling Converter
+        self.embedder = None # Lazy-loaded SentenceTransformer
+        self.client = httpx.AsyncClient(base_url=self.llama_base_url, timeout=120.0)
+        self.ANALYSIS_SCHEMA = {
+            "document_name": "Legal Asset",
+            "summary": "AI summary currently unavailable.",
+            "key_terms": [],
+            "summary_items": [],
+            "clauses": [],
+            "compliance_score": 0,
+            "legal_conflicts": []
+        }
         self._load_faiss_index()
 
     def _load_faiss_index(self):
@@ -32,161 +44,277 @@ class AIAnalyzer:
         except Exception as e:
             print(f"[LexNet] Failed to load FAISS index: {e}")
 
-    def _call_gemini(self, contents, retries=2):
-        """Wrapper for Gemini content generation with exponential backoff on 429."""
-        if not self.client:
-            return "ERROR_CONFIG: Gemini API client not initialized. Check your GEMINI_API_KEY."
+    async def _call_llama_server(self, prompt: str, json_format: bool = False) -> str:
+        url = "/v1/chat/completions"
+        payload = {
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False
+        }
+        if json_format:
+            payload["response_format"] = {"type": "json_object"}
             
-        for attempt in range(retries + 1):
-            try:
-                response = self.client.models.generate_content(
-                    model=self.model_id,
-                    contents=contents
-                )
-                return response.text
-            except Exception as e:
-                err_str = str(e)
-                print(f"[LexNet] Gemini API error: {err_str}")
-                
-                # Check for rate limits / quota
-                if any(x in err_str.upper() for x in ["429", "RESOURCE_EXHAUSTED", "QUOTA"]):
-                    if attempt < retries:
-                        wait_time = (attempt + 1) * 5
-                        print(f"[LexNet] Quota Hit. Retrying in {wait_time}s...")
-                        time.sleep(wait_time)
-                        continue
-                    return "ERROR_THROTTLED: Neural Engine is currently at capacity. Please wait 30 seconds."
-                
-                # Check for auth errors
-                if "401" in err_str or "API_KEY_INVALID" in err_str:
-                    return "ERROR_AUTH: Invalid Gemini API Key. Please check your .env file."
-                
-                return f"ERROR_AI: {err_str}"
-        
-        return "ERROR_TIMEOUT: AI connection timed out after retries."
+        try:
+            resp = await self.client.post(url, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            return data["choices"][0]["message"]["content"]
+        except Exception as e:
+            print(f"[LexNet] API Error: {e}")
+            return f"ERROR_AI: {str(e)}"
+            
+    async def _call_llama_server_stream(self, prompt: str):
+        url = "/v1/chat/completions"
+        payload = {
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": True
+        }
+        try:
+            async with self.client.stream("POST", url, json=payload) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if line:
+                        if line.startswith("data: "):
+                            data_str = line[6:]
+                            if data_str.strip() == "[DONE]":
+                                break
+                            try:
+                                data = json.loads(data_str)
+                                if "choices" in data and len(data["choices"]) > 0:
+                                    delta = data["choices"][0].get("delta", {})
+                                    if delta.get("content"):
+                                        yield delta["content"]
+                            except json.JSONDecodeError:
+                                continue
+        except Exception as e:
+            yield f"\nERROR: {str(e)}"
 
-    def _get_gemini_file(self, public_id: str, url: str):
-        """Download from Cloudinary and upload to Gemini File API if not cached."""
+    def _init_embedder(self):
+        if self.embedder is None:
+            print(f"[LexNet] Initializing local embedding model ({self.embedding_model})...")
+            from sentence_transformers import SentenceTransformer
+            self.embedder = SentenceTransformer(self.embedding_model)
+        return self.embedder
+
+    def _init_converter(self):
+        """Lazily initialize the heavy Docling AI model (2GB RAM)."""
+        if self.converter is None:
+            print("[LexNet] Initializing heavy Docling AI model (2GB RAM)...")
+            self.converter = DocumentConverter()
+        return self.converter
+
+    def _get_pypdf2_text(self, file_path: str) -> str:
+        """Fast, lightweight text extraction from PDF using standard rules (no AI)."""
+        try:
+            text = ""
+            with open(file_path, "rb") as f:
+                reader = PyPDF2.PdfReader(f)
+                for page in reader.pages:
+                    text += page.extract_text() or ""
+            return text.strip()
+        except Exception as e:
+            print(f"[LexNet] PyPDF2 extraction failed: {e}")
+            return ""
+
+    async def _get_local_text(self, file_path: str, public_id: str, db=None) -> str:
+        """Hierarchical text extraction: DB Cache -> PyPDF2 (Fast) -> Docling (AI)."""
         if public_id in self.file_cache:
             return self.file_cache[public_id]
 
-        if not self.client:
-            return None
+        if not os.path.exists(file_path):
+            return f"ERROR_FILE_NOT_FOUND: {file_path}"
 
+        # 1. Check PostgreSQL Cache
+        if db:
+            print(f"[LexNet] Checking DB cache for {public_id}...")
+            from sqlalchemy import select
+            stmt = select(DocumentLedger.extracted_text).where(DocumentLedger.public_id == public_id)
+            res = await db.execute(stmt)
+            cached_text = res.scalar_one_or_none()
+            if cached_text:
+                print(f"[LexNet] DB cache HIT for {public_id}")
+                self.file_cache[public_id] = cached_text
+                return cached_text
+            print(f"[LexNet] DB cache MISS for {public_id}")
+
+        # 2. Try PyPDF2 (Lighter/Fast)
+        print(f"[LexNet] Attempting fast PyPDF2 extraction for {public_id}...")
+        fast_text = self._get_pypdf2_text(file_path)
+        if len(fast_text) > 100: # Enough for metadata/analysis
+            print(f"[LexNet] PyPDF2 found {len(fast_text)} chars. Using fast path.")
+            # Cache it back to DB if session provided
+            if db:
+                from sqlalchemy import update
+                await db.execute(update(DocumentLedger).where(DocumentLedger.public_id == public_id).values(extracted_text=fast_text))
+                await db.commit()
+            self.file_cache[public_id] = fast_text
+            return fast_text
+
+        # 3. Last Resort: Docling (AI/Heavy - 2GB RAM)
         try:
-            print(f"[LexNet] Downloading from Cloudinary: {public_id}")
-            response = requests.get(url)
-            if response.status_code != 200:
-                print(f"[LexNet] Cloudinary download failed (HTTP {response.status_code}): {url}")
-                return f"ERROR_DOWNLOAD: Cloudinary asset inaccessible (HTTP {response.status_code})."
-
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                tmp.write(response.content)
-                tmp_path = tmp.name
-
-            print(f"[LexNet] Uploading to Gemini File Context...")
-            gemini_file = self.client.files.upload(file=tmp_path)
+            print(f"[LexNet] FALLBACK: Running heavy Docling AI extraction for {public_id}...")
+            converter = self._init_converter()
+            result = converter.convert(file_path)
+            text = result.document.export_to_markdown()
             
-            # Simple health check for upload
-            if not gemini_file or not hasattr(gemini_file, 'name'):
-                 return "ERROR_UPLOAD: Gemini File API rejected the document."
-
-            os.remove(tmp_path)
-            self.file_cache[public_id] = gemini_file
-            return gemini_file
+            text = text.strip()[:15000] # Limit context
+            print(f"[LexNet] Docling extracted {len(text)} characters.")
+            
+            if len(text) < 50:
+                self.file_cache[public_id] = "ERROR_NO_CONTENT: Image-only scan detected. Please upload a readable PDF."
+                return self.file_cache[public_id]
+            
+            # Save to Cache & DB
+            self.file_cache[public_id] = text
+            if db:
+                from sqlalchemy import update
+                await db.execute(update(DocumentLedger).where(DocumentLedger.public_id == public_id).values(extracted_text=text))
+                await db.commit()
+            return text
         except Exception as e:
-            print(f"[LexNet] Neural Sync failed: {e}")
-            return f"ERROR_SYNC: {str(e)}"
+            print(f"[LexNet] Deep AI parsing failed: {e}")
+            return f"ERROR_PARSING: {str(e)}"
 
-    def retrieval_qa(self, query: str) -> str:
-        """RAG Q&A using Gemini and FAISS (General Knowledge)."""
-        if not self.client or not self.index:
-            return "Demo Mode: RAG Index not configured."
+    async def retrieval_qa_stream(self, query: str):
+        """RAG Q&A using Ollama and FAISS (General Knowledge) with Streaming."""
+        if not self.index:
+            yield "Demo Mode: RAG Index not configured."
+            return
             
         try:
-            embed_resp = self.client.models.embed_content(
-                model='gemini-embedding-001',
-                contents=query
-            )
-            query_vector = np.array([embed_resp.embeddings[0].values], dtype='float32')
+            embedder = self._init_embedder()
+            embedding = embedder.encode(query)
+            query_vector = np.array([embedding], dtype='float32')
             
-            # Search FAISS
             k = 3
             D, I = self.index.search(query_vector, k)
             
             context_pieces = [self.chunks[i] for i in I[0] if i < len(self.chunks) and i != -1]
             context = "\n\n".join(context_pieces)
             
-            prompt = f"Context: {context}\nQuestion: {query}"
-            return self._call_gemini(prompt)
+            prompt = f"""You are a knowledgeable legal assistant specializing in Indian law. 
+Context from our database: 
+{context}
+
+User Question: {query}
+
+Instructions: Answer the user's question comprehensively. Use the provided context where relevant. If the context does not contain the answer (e.g., for IPC laws while context is Civil Procedure), use your general knowledge of Indian law to provide a helpful response. Do not explicitly say 'Based on the provided text' if you do so."""
+            async for chunk in self._call_llama_server_stream(prompt):
+                yield chunk
         except Exception as e:
-            return f"Error: {e}"
+            yield f"Error: {e}"
 
-    def analyze_cloudinary_doc(self, public_id: str, url: str) -> dict:
-        """Perform deep analysis with structured JSON extraction."""
-        sync_result = self._get_gemini_file(public_id, url)
-        if isinstance(sync_result, str) and "ERROR_" in sync_result:
-            return {"error": sync_result}
+    async def analyze_document(self, file_path: str, public_id: str = "temp", db=None) -> dict:
+        """Perform deep analysis on a local file, with persistence and smart re-analysis."""
+        # 1. Check DB for already processed analysis
+        ledger_doc = None
+        if db:
+            from sqlalchemy.orm import selectinload
+            stmt = select(DocumentLedger).options(selectinload(DocumentLedger.analysis)).where(DocumentLedger.public_id == public_id)
+            res = await db.execute(stmt)
+            ledger_doc = res.scalar_one_or_none()
             
-        gemini_file = sync_result
+            if ledger_doc and ledger_doc.analysis:
+                cached_data = ledger_doc.analysis.analysis_data
+                # SMART RE-ANALYSIS: Only HIT if we have a summary AND clauses.
+                # If we have a summary but 0 clauses, the AI likely missed the main task.
+                if len(cached_data.get("clauses", [])) > 0 and len(cached_data.get("summary", "")) > 100:
+                    print(f"[LexNet] DB cache HIT for Analysis: {public_id}")
+                    return cached_data
+                print(f"[LexNet] Cache exists but is INCOMPLETE (0 clauses or short summary). Re-analyzing {public_id}...")
 
-        prompt = """
-        Analyze this legal document. Provide a professional overview.
-        Return ONLY valid JSON:
-        {
+        # 2. Extract text (uses text cache/PyPDF2 fallback)
+        text_context = await self._get_local_text(file_path, public_id, db=db)
+        if "ERROR_" in text_context:
+            return {"error": text_context}
+
+        prompt = f"""
+        Analyze the following legal document and provide a professional overview.
+        Document Context:
+        {text_context}
+        
+        Return ONLY valid JSON with this exact structure:
+        {{
             "document_name": "Friendly name",
             "summary": "2-3 paragraphs",
-            "key_terms": [{"label": "...", "value": "...", "type": "financial|notice|term|other"}],
-            "summary_items": [{"title": "...", "text": "...", "risk_level": "low|medium|high"}],
-            "clauses": [{"section": "...", "title": "...", "excerpt": "...", "risk_assessment": "...", "suggestion": "..."}],
-            "compliance_score": 0-100,
+            "key_terms": [{{"label": "...", "value": "...", "type": "financial|notice|term|other"}}],
+            "summary_items": [{{"title": "...", "text": "...", "risk_level": "low|medium|high"}}],
+            "clauses": [{{"section": "...", "title": "...", "excerpt": "...", "risk_assessment": "...", "suggestion": "..."}}],
+            "compliance_score": 85,
             "legal_conflicts": ["..."]
-        }
+        }}
         """
-        raw_text = self._call_gemini([gemini_file, prompt])
+        raw_text = await self._call_llama_server(prompt, json_format=True)
         
         if "ERROR_" in raw_text:
             return {"error": raw_text}
 
         try:
-            text = raw_text
-            if "```json" in text:
-                text = text.split("```json")[1].split("```")[0].strip()
-            return json.loads(text)
+            # 3. Robust JSON Extraction (Find first '{' and last '}')
+            import re
+            json_match = re.search(r'(\{.*\})', raw_text, re.DOTALL)
+            if json_match:
+                raw_text = json_match.group(1)
+            
+            ai_data = json.loads(raw_text)
+            
+            # 4. Schema Enforcement: Merge with defaults to prevent frontend errors
+            analysis_dict = {**self.ANALYSIS_SCHEMA, **ai_data}
+            
+            # 5. Persist to DB (UPSERT logic)
+            if db and ledger_doc:
+                print(f"[LexNet] Saving/Updating Analysis in DB for {public_id}")
+                if ledger_doc.analysis:
+                    ledger_doc.analysis.analysis_data = analysis_dict
+                else:
+                    new_analysis = DocumentAnalysis(
+                        document_id=ledger_doc.id,
+                        analysis_data=analysis_dict
+                    )
+                    db.add(new_analysis)
+                await db.commit()
+                
+            return analysis_dict
         except Exception as e:
-            return {"error": f"ERROR_PARSE: Result was not valid JSON. {str(e)}", "raw": raw_text[:300]}
+            # Even on failure, return a valid SCHEMA result with the error embedded
+            error_msg = f"ERROR_PARSE: {str(e)}"
+            print(f"[LexNet] JSON Parsing Failed: {error_msg}")
+            return {**self.ANALYSIS_SCHEMA, "document_name": "SCAN_FAILURE", "summary": error_msg}
 
-    def chat_with_doc(self, public_id: str, url: str, question: str, history: list = None) -> str:
-        """Contextual chat within a document."""
-        sync_result = self._get_gemini_file(public_id, url)
-        if isinstance(sync_result, str) and "ERROR_" in sync_result:
-            return sync_result
+    async def chat_with_doc_stream(self, file_path: str, public_id: str, question: str, history: list = None, db=None):
+        """Contextual chat within a local document using streaming."""
+        text_context = await self._get_local_text(file_path, public_id, db=db)
+        if "ERROR_" in text_context:
+            yield text_context
+            return
 
-        gemini_file = sync_result
-
-        # Process history roles for Gemini (expects 'user' or 'model')
-        formatted_history = []
+        formatted_history = ""
         if history:
             for h in history:
-                # Map 'ai' or 'assistant' to 'model'
-                role = "model" if h.get("role") in ["ai", "assistant", "model"] else "user"
-                formatted_history.append({
-                    "role": role,
-                    "parts": h.get("parts", [{"text": h.get("text", "")}])
-                })
+                role = "AI" if h.get("role") in ["ai", "assistant", "model", "bot"] else "User"
+                text = h.get("text", "")
+                if not text and "parts" in h:
+                    text = h["parts"][0].get("text", "")
+                formatted_history += f"{role}: {text}\n"
 
-        # Build contents: [File, ...History, current_query]
-        contents = [gemini_file]
-        for msg in formatted_history:
-            contents.append(msg)
-        contents.append(f"Answer briefly based on the document: {question}")
+        prompt = f"""
+        You are a legal assistant. Answer the user's question based on the document text.
+        Document Text:
+        {text_context}
         
-        return self._call_gemini(contents)
+        Chat History:
+        {formatted_history}
+        
+        User Question: {question}
+        Answer:"""
+        
+        async for chunk in self._call_llama_server_stream(prompt):
+            yield chunk
 
-    def explain_jargon(self, text: str) -> str:
+    async def explain_jargon_stream(self, text: str):
         """Simplifies legal jargon."""
-        prompt = f"Explain in plain English for a non-lawyer: {text}"
-        return self._call_gemini(prompt)
+        prompt = f"Explain the following legal text in plain English for a non-lawyer. Be concise:\n{text}"
+        async for chunk in self._call_llama_server_stream(prompt):
+            yield chunk
 
 # Singleton instance
 ai_analyzer = AIAnalyzer()

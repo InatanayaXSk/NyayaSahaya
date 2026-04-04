@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 
 const API_BASE = 'http://localhost:8000/api';
 
@@ -37,12 +38,20 @@ function StatusBadge({ status }) {
 export default function DashboardPage() {
     const [stats, setStats] = useState(defaultStats);
 
+    const { token } = useAuth();
+
     useEffect(() => {
-        fetch(`${API_BASE}/dashboard/stats`)
+        if (!token) return;
+
+        fetch(`${API_BASE}/dashboard/stats`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        })
             .then(r => r.json())
             .then(data => setStats({ ...defaultStats, ...data }))
             .catch(() => { });
-    }, []);
+    }, [token]);
 
     return (
         <div className="max-w-[1200px] mx-auto px-6 lg:px-10 py-8 space-y-8">

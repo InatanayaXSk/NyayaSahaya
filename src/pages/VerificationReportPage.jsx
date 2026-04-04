@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 
 const defaultEvents = [
     { title: 'Certification Finalized', time: '14:30:05 UTC', desc: 'Document locked and permanent hash stored on LexNet Ledger. All signatories validated.', active: true },
@@ -11,8 +12,16 @@ export default function VerificationReportPage() {
     const [auditEvents, setAuditEvents] = useState(defaultEvents);
     const [docData, setDocData] = useState({ hash: 'e3b0c442...8fc1d', id: 'LNX-DOC-7742-XP', status: 'INTEGRITY VERIFIED' });
 
+    const { token } = useAuth();
+
     useEffect(() => {
-        fetch('http://localhost:8000/api/documents/1')
+        if (!token) return;
+
+        fetch('http://localhost:8000/api/documents/1', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        })
             .then(res => res.json())
             .then(data => {
                 if(data.events && data.events.length > 0) {

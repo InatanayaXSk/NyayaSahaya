@@ -1,4 +1,99 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+
+/* ===================== Signature Drawing Pad ===================== */
+function SignaturePad({ value, onChange, label }) {
+    const canvasRef = useRef(null);
+    const [isDrawing, setIsDrawing] = useState(false);
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        ctx.strokeStyle = '#2563eb'; // Professional Ink Blue
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // Load existing signature if present
+        if (value && value.startsWith('data:image')) {
+            const img = new Image();
+            img.onload = () => ctx.drawImage(img, 0, 0);
+            img.src = value;
+        }
+    }, []);
+
+    const getCoords = (e) => {
+        const rect = canvasRef.current.getBoundingClientRect();
+        // Support both mouse and touch events
+        const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+        const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+        
+        return {
+            x: (clientX - rect.left) * (canvasRef.current.width / rect.width),
+            y: (clientY - rect.top) * (canvasRef.current.height / rect.height)
+        };
+    };
+
+    const startDrawing = (e) => {
+        const { x, y } = getCoords(e);
+        const ctx = canvasRef.current.getContext('2d');
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        setIsDrawing(true);
+    };
+
+    const draw = (e) => {
+        if (!isDrawing) return;
+        const { x, y } = getCoords(e);
+        const ctx = canvasRef.current.getContext('2d');
+        ctx.lineTo(x, y);
+        ctx.stroke();
+    };
+
+    const stopDrawing = () => {
+        if (!isDrawing) return;
+        setIsDrawing(false);
+        const dataUrl = canvasRef.current.toDataURL();
+        onChange(dataUrl);
+    };
+
+    const clear = () => {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        onChange('');
+    };
+
+    return (
+        <div className="space-y-2">
+            <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">{label}</label>
+                <button onClick={clear} className="text-[10px] font-black text-rose-500 uppercase tracking-widest hover:bg-rose-500/10 px-2 py-0.5 rounded transition-all">Clear Ink</button>
+            </div>
+            <div className="relative group">
+                <canvas
+                    ref={canvasRef}
+                    width={400}
+                    height={150}
+                    className="w-full h-32 bg-slate-50 dark:bg-background-dark border-2 border-dashed border-slate-200 dark:border-border-dark rounded-2xl cursor-crosshair touch-none"
+                    onMouseDown={startDrawing}
+                    onMouseMove={draw}
+                    onMouseUp={stopDrawing}
+                    onMouseLeave={stopDrawing}
+                    onTouchStart={startDrawing}
+                    onTouchMove={draw}
+                    onTouchEnd={stopDrawing}
+                />
+                {!value && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20 group-hover:opacity-10 transition-opacity">
+                        <span className="material-symbols-outlined text-4xl">draw</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest ml-2">Draw Signature Here</span>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
 
 /* ===================== Smart Wizard Modal ===================== */
 function SmartWizardModal({ template, onClose, onApply, wizardSteps }) {
@@ -134,21 +229,38 @@ export default function DocumentGeneratorPage() {
         ],
     };
 
-    // Fetch template content from backend
+    const { token } = useAuth();
+
+    // Initial Cache Sync & Template Load
     useEffect(() => {
         const fetchTemplate = async () => {
+            if (!token) return;
+
             setIsLoadingTemplate(true);
             try {
-                const response = await fetch(`http://localhost:8000/api/templates/${selectedTemplate}`);
-                const data = await response.json();
-                setTemplateData(data);
-                setPreviewContent(data.content);
-                
-                const initialData = {};
-                data.placeholders.forEach(p => {
-                    initialData[p] = ''; 
+                const response = await fetch(`http://localhost:8000/api/templates/${selectedTemplate}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
                 });
-                setFormData(initialData);
+                const data = await response.json();
+                
+                // 1. Check Local Cache (Timestamp Synergy)
+                const cacheKey = `lexnet_draft_${selectedTemplate}`;
+                const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+                
+                setTemplateData(data);
+                
+                if (cached && cached.timestamp > (data.updated_at || 0)) {
+                    console.log(`[LexNet] Restoring newer local draft for ${selectedTemplate}`);
+                    setFormData(cached.data);
+                } else {
+                    const initialData = {};
+                    data.placeholders.forEach(p => {
+                        initialData[p] = ''; 
+                    });
+                    setFormData(initialData);
+                }
             } catch (error) {
                 console.error("Failed to fetch template", error);
             } finally {
@@ -156,7 +268,19 @@ export default function DocumentGeneratorPage() {
             }
         };
         fetchTemplate();
-    }, [selectedTemplate]);
+    }, [selectedTemplate, token]);
+
+    // Auto-Save Effect
+    useEffect(() => {
+        if (Object.keys(formData).length > 0) {
+            const cacheKey = `lexnet_draft_${selectedTemplate}`;
+            const syncData = {
+                timestamp: Date.now(),
+                data: formData
+            };
+            localStorage.setItem(cacheKey, JSON.stringify(syncData));
+        }
+    }, [formData, selectedTemplate]);
 
     // Update preview when form data changes
     useEffect(() => {
@@ -164,7 +288,12 @@ export default function DocumentGeneratorPage() {
         Object.entries(formData).forEach(([placeholder, value]) => {
             const escapedPlaceholder = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             if (value) {
-                updatedContent = updatedContent.replace(new RegExp(escapedPlaceholder, 'g'), `<span class="bg-primary/20 px-1 font-bold text-slate-900">${value}</span>`);
+                if (value.startsWith('data:image')) {
+                    // Render Signature Image
+                    updatedContent = updatedContent.replace(new RegExp(escapedPlaceholder, 'g'), `<img src="${value}" class="inline-block max-h-12 align-middle border-b border-primary/30" />`);
+                } else {
+                    updatedContent = updatedContent.replace(new RegExp(escapedPlaceholder, 'g'), `<span class="bg-primary/20 px-1 font-bold text-slate-900">${value}</span>`);
+                }
             } else {
                 updatedContent = updatedContent.replace(new RegExp(escapedPlaceholder, 'g'), `<span class="bg-slate-100 text-slate-400 border-b border-dashed border-slate-300 px-1">${placeholder}</span>`);
             }
@@ -189,7 +318,10 @@ export default function DocumentGeneratorPage() {
             
             const response = await fetch('http://localhost:8000/api/generate-doc', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify(payload)
             });
             const result = await response.json();
@@ -270,6 +402,19 @@ export default function DocumentGeneratorPage() {
                 <div className="lg:col-span-5 bg-white dark:bg-card-dark rounded-3xl border border-lavender-grey/30 dark:border-border-dark shadow-xl flex flex-col overflow-hidden">
                     <div className="p-6 border-b border-lavender-grey/20 dark:border-border-dark flex items-center justify-between">
                         <h3 className="font-bold text-lg dark:text-white">Document Details</h3>
+                        <button 
+                            onClick={() => {
+                                if(confirm("Clear current draft?")) {
+                                    const empty = {};
+                                    templateData.placeholders.forEach(p => empty[p] = '');
+                                    setFormData(empty);
+                                    localStorage.removeItem(`lexnet_draft_${selectedTemplate}`);
+                                }
+                            }}
+                            className="text-[10px] font-black text-rose-500 uppercase tracking-widest bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20 hover:bg-rose-500/20 transition-all"
+                        >
+                            Reset Draft
+                        </button>
                     </div>
                     <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-6">
                         {isLoadingTemplate ? (
@@ -280,12 +425,28 @@ export default function DocumentGeneratorPage() {
                         ) : (
                             <div className="grid grid-cols-1 gap-4">
                                 <SectionHeader number="1" title="Fill Placeholders" />
-                                {templateData.placeholders.map((p, i) => (
-                                    <div key={i} className="space-y-1.5">
-                                        <label className={labelClass}>{p.replace(/[()]/g, '').trim() || 'Field'}</label>
-                                        <input className={inputClass} placeholder={`Enter ${p}`} type="text" value={formData[p] || ''} onChange={e => setFormData(prev => ({ ...prev, [p]: e.target.value }))} />
-                                    </div>
-                                ))}
+                                {templateData.placeholders.map((p, i) => {
+                                    const isSignature = p.toLowerCase().includes('signature');
+                                    const label = p.replace(/[()]/g, '').trim() || 'Field';
+                                    
+                                    if (isSignature) {
+                                        return (
+                                            <SignaturePad 
+                                                key={i}
+                                                label={label}
+                                                value={formData[p] || ''}
+                                                onChange={(val) => setFormData(prev => ({ ...prev, [p]: val }))}
+                                            />
+                                        );
+                                    }
+
+                                    return (
+                                        <div key={i} className="space-y-1.5">
+                                            <label className={labelClass}>{label}</label>
+                                            <input className={inputClass} placeholder={`Enter ${p}`} type="text" value={formData[p] || ''} onChange={e => setFormData(prev => ({ ...prev, [p]: e.target.value }))} />
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
@@ -333,10 +494,16 @@ export default function DocumentGeneratorPage() {
             </div>
 
             {/* Floating Footer */}
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 dark:bg-card-dark text-white px-6 py-3 rounded-full flex items-center gap-8 shadow-2xl z-50 dark:border dark:border-border-dark">
-                <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-400"></span><span className="text-xs font-bold tracking-widest uppercase opacity-70">Cloud Storage: Active</span></div>
-                <div className="h-4 w-px bg-white/20"></div>
-                <div className="flex items-center gap-2"><span className="material-symbols-outlined text-primary text-lg">bolt</span><span className="text-xs font-bold tracking-widest uppercase">Secure Storage</span></div>
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 dark:bg-card-dark text-white px-6 py-3 rounded-full flex items-center gap-8 shadow-2xl z-50 dark:border dark:border-border-dark animate-in slide-in-from-bottom-5 duration-500">
+                <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
+                    <span className="text-[10px] font-black tracking-widest uppercase opacity-70">Neural Auth: Local Draft Secure</span>
+                </div>
+                <div className="h-4 w-px bg-white/10"></div>
+                <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-primary text-lg font-black">verified</span>
+                    <span className="text-[10px] font-black tracking-widest uppercase tracking-[0.2em]">Ready for Generation</span>
+                </div>
             </div>
 
             {showWizard && <SmartWizardModal template={selectedTemplate} onClose={() => setShowWizard(false)} onApply={(a) => setFormData(p => ({...p, ...a}))} wizardSteps={wizardSteps} />}

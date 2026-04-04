@@ -4,8 +4,10 @@ When the RPi is unreachable, falls back to local mock data so the
 frontend always gets a usable response.
 """
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from app.config import settings
+from app.models import User
+from app.api.route_users import get_current_user
 from app.services.hardware_provider import hardware_provider
 
 router = APIRouter()
@@ -34,20 +36,20 @@ async def _proxy_post(path: str, body: dict | None, fallback: dict) -> dict:
 
 
 @router.get("/hardware/status")
-async def hardware_status():
+async def hardware_status(current_user: User = Depends(get_current_user)):
     status = await hardware_provider.get_status()
     # Still attempt to proxy if RPi is theoretically available, but for our mock, we just return the provider status
     return status
 
 
 @router.post("/hardware/authenticate")
-async def authenticate():
+async def authenticate(current_user: User = Depends(get_current_user)):
     return await hardware_provider.request_biometric_scan(user_id=1) # Hardcoded for now
 
 
 
 @router.get("/hardware/heartbeat")
-async def heartbeat():
+async def heartbeat(current_user: User = Depends(get_current_user)):
     return await _proxy_get("/heartbeat", {
         "cpu_load": 45.0, "ram_usage_gb": 2.1, "ram_total_gb": 4,
         "disk_io": "Stable", "temperature_c": 42.0,
@@ -55,28 +57,28 @@ async def heartbeat():
 
 
 @router.post("/hardware/rfid/scan")
-async def rfid_scan():
+async def rfid_scan(current_user: User = Depends(get_current_user)):
     return await _proxy_post("/rfid/scan", None, {
         "token_id": "mock_token", "authorized": True,
     })
 
 
 @router.post("/hardware/crypto/sign")
-async def crypto_sign(body: dict):
+async def crypto_sign(body: dict, current_user: User = Depends(get_current_user)):
     return await _proxy_post("/crypto/sign", body, {
         "signature": "mock_sig", "algorithm": "ECDSA-secp256k1",
     })
 
 
 @router.post("/hardware/crypto/verify")
-async def crypto_verify(body: dict):
+async def crypto_verify(body: dict, current_user: User = Depends(get_current_user)):
     return await _proxy_post("/crypto/verify", body, {
         "valid": True, "algorithm": "ECDSA-secp256k1",
     })
 
 
 @router.get("/hardware/tls/status")
-async def tls_status():
+async def tls_status(current_user: User = Depends(get_current_user)):
     return await _proxy_get("/tls/status", {
         "handshake": "complete", "protocol": "TLSv1.3",
         "cipher": "AES-256-GCM", "integrity": "100%",

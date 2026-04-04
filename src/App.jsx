@@ -10,24 +10,36 @@ import CryptoSigningPage from './pages/CryptoSigningPage';
 import NetworkRegistryPage from './pages/NetworkRegistryPage';
 import VerificationReportPage from './pages/VerificationReportPage';
 import BridgeMonitorPage from './pages/BridgeMonitorPage';
+import AuthPage from './pages/AuthPage';
+import { AuthProvider } from './context/AuthContext';
+import { ClientProvider } from './context/ClientContext';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 
 function App() {
   return (
-    <Router>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/document-generator" element={<DocumentGeneratorPage />} />
-          <Route path="/risk-analysis" element={<RiskAnalysisPage />} />
-          <Route path="/legal-summary" element={<LegalSummaryPage />} />
-          <Route path="/hardware-auth" element={<HardwareAuthPage />} />
-          <Route path="/crypto-signing" element={<CryptoSigningPage />} />
-          <Route path="/network-registry" element={<NetworkRegistryPage />} />
-          <Route path="/verification-report" element={<VerificationReportPage />} />
-          <Route path="/bridge-monitor" element={<BridgeMonitorPage />} />
-        </Routes>
-      </Layout>
-    </Router>
+    <AuthProvider>
+      <ClientProvider>
+        <Router>
+          <Layout>
+            <Routes>
+              {/* Public Routes */}
+              <Route path="/auth" element={<AuthPage />} />
+              
+              {/* Protected Routes */}
+              <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+              <Route path="/document-generator" element={<ProtectedRoute><DocumentGeneratorPage /></ProtectedRoute>} />
+              <Route path="/risk-analysis" element={<ProtectedRoute><RiskAnalysisPage /></ProtectedRoute>} />
+              <Route path="/legal-summary" element={<ProtectedRoute><LegalSummaryPage /></ProtectedRoute>} />
+              <Route path="/hardware-auth" element={<ProtectedRoute><HardwareAuthPage /></ProtectedRoute>} />
+              <Route path="/crypto-signing" element={<ProtectedRoute><CryptoSigningPage /></ProtectedRoute>} />
+              <Route path="/network-registry" element={<NetworkRegistryPage />} />
+              <Route path="/verification-report" element={<VerificationReportPage />} />
+              <Route path="/bridge-monitor" element={<ProtectedRoute><BridgeMonitorPage /></ProtectedRoute>} />
+            </Routes>
+          </Layout>
+        </Router>
+      </ClientProvider>
+    </AuthProvider>
   );
 }
 

@@ -2,43 +2,67 @@ import hashlib
 import time
 import random
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy import select, desc
+from sqlalchemy.ext.asyncio import AsyncSession
 from app import schemas as s
+from app.models import DocumentLedger
+from app.database import get_db
 from app.services.crypto import software_sign_document, verify_signature
-from app.services.cloudinary_service import cloudinary_service
+from app.services.file_service import file_service
 
 router = APIRouter()
 
 
 @router.post("/crypto/sign")
-async def sign_document(request: s.SigningRequest):
-    """Sign a document and store the signature packet in Cloudinary context."""
+async def sign_document(request: s.SigningRequest, db: AsyncSession = Depends(get_db)):
+    """Sign a document and store the signature packet in the SQL Ledger."""
     public_id = str(request.document_id)
-    doc_details = cloudinary_service.get_document_details(public_id)
-    if not doc_details:
-        raise HTTPException(status_code=404, detail="Document not found in Cloudinary")
+    
+    # Get document from PostgreSQL
+    stmt = select(DocumentLedger).where(DocumentLedger.public_id == public_id)
+    result = await db.execute(stmt)
+    ledger_entry = result.scalar_one_or_none()
+    
+    if not ledger_entry:
+        raise HTTPException(status_code=404, detail="Document not found in local ledger")
         
-    # Get hash from details or generate a dummy one
-    doc_hash = doc_details.get("context", {}).get("custom", {}).get("doc_hash")
+    doc_hash = ledger_entry.current_hash
     if not doc_hash:
         doc_hash = hashlib.sha256(str(time.time()).encode()).hexdigest()
         
     # Generate signature using software crypto
     signature_hex, public_key_hex = software_sign_document(doc_hash)
     
-    # Update Cloudinary context with signature data
-    updates = {
-        "status": "signed",
-        "doc_hash": doc_hash,
-        "signature_data": signature_hex,
-        "public_key": public_key_hex,
-        "signer_id": request.user_id,
-        "signed_at": datetime.now(timezone.utc).isoformat()
-    }
+    # Update local ledger status if needed (we are appending a new block anyway)
+    pass
     
-    success = cloudinary_service.update_metadata(public_id, updates)
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to update Cloudinary metadata")
+    # Ledger Chaining Logic (PostgreSQL)
+    # Find the most recent ledger entry to chain from
+    stmt = select(DocumentLedger).where(DocumentLedger.public_id == public_id).order_by(desc(DocumentLedger.timestamp))
+    result = await db.execute(stmt)
+    last_block = result.scalars().first()
+    
+    previous_hash = last_block.current_hash if last_block else "genesis"
+    
+    # Calculate new chained hash (hash of doc + previous hash + signature)
+    new_chained_content = f"{doc_hash}{previous_hash}{signature_hex}"
+    new_current_hash = hashlib.sha256(new_chained_content.encode()).hexdigest()
+
+    # Append to SQL Ledger
+    new_ledger_entry = DocumentLedger(
+        public_id=public_id,
+        document_type=doc_details.get("context", {}).get("custom", {}).get("document_type", "unknown"),
+        current_hash=new_current_hash,
+        previous_hash=previous_hash,
+        owner_username=last_block.owner_username if last_block else request.user_id,
+        signature_data=signature_hex,
+        public_key=public_key_hex,
+        signer_id=request.user_id
+    )
+    db.add(new_ledger_entry)
+    await db.commit()
+
     
     return {
         "doc_hash": doc_hash,
@@ -52,24 +76,27 @@ async def sign_document(request: s.SigningRequest):
 
 
 @router.post("/crypto/verify")
-async def verify_document(request: dict):
-    """Verify a document's software signature using Cloudinary metadata."""
+async def verify_document(request: dict, db: AsyncSession = Depends(get_db)):
+    """Verify a document's software signature using local PostgreSQL records."""
     public_id = request.get("document_id")
     if not public_id:
-         raise HTTPException(status_code=400, detail="Must provide document_id (public_id)")
+         raise HTTPException(status_code=400, detail="Must provide document_id")
          
-    doc_details = cloudinary_service.get_document_details(public_id)
-    if not doc_details:
-        raise HTTPException(status_code=404, detail="Document not found")
-        
-    context = doc_details.get("context", {}).get("custom", {})
-    doc_hash = context.get("doc_hash")
-    signature_data = context.get("signature_data")
-    public_key = context.get("public_key")
+    # Fetch most recent signed block
+    stmt = select(DocumentLedger).where(
+        DocumentLedger.public_id == public_id, 
+        DocumentLedger.signature_data != None
+    ).order_by(desc(DocumentLedger.timestamp))
+    result = await db.execute(stmt)
+    latest_sig = result.scalars().first()
     
-    if not signature_data or not public_key:
-        raise HTTPException(status_code=404, detail="No signature found for this document")
+    if not latest_sig:
+        raise HTTPException(status_code=404, detail="No signature found locally for this document")
         
+    doc_hash = latest_sig.current_hash
+    signature_data = latest_sig.signature_data
+    public_key = latest_sig.public_key
+    
     is_valid = verify_signature(doc_hash, signature_data, public_key)
     
     return {

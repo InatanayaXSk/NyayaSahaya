@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useClient } from '../context/ClientContext';
 
 const API_BASE = "http://localhost:8000";
 
@@ -10,13 +12,23 @@ export default function RiskAnalysisPage() {
     const [error, setError] = useState(null);
     const [activeClause, setActiveClause] = useState(null);
 
+    const { token } = useAuth();
+    const { setActiveDocument } = useClient();
+
     useEffect(() => {
-        fetchDocuments();
-    }, []);
+        if (token) {
+            fetchDocuments();
+        }
+    }, [token]);
 
     const fetchDocuments = async () => {
+        if (!token) return;
         try {
-            const resp = await fetch(`${API_BASE}/api/documents`);
+            const resp = await fetch(`${API_BASE}/api/documents`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
             const data = await resp.json();
             setDocuments(data.documents || []);
         } catch (err) {
@@ -26,6 +38,7 @@ export default function RiskAnalysisPage() {
 
     const handleSelectDoc = async (doc) => {
         setSelectedDoc(doc);
+        setActiveDocument(doc); // Propagate to Chatbot context
         setLoading(true);
         setAnalysis(null);
         setError(null);
@@ -33,7 +46,10 @@ export default function RiskAnalysisPage() {
         try {
             const resp = await fetch(`${API_BASE}/api/analyze`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify({ public_id: doc.public_id, url: doc.secure_url || doc.url })
             });
             const data = await resp.json();
@@ -51,6 +67,30 @@ export default function RiskAnalysisPage() {
             setError("CONEX_FAIL: Failed to reach Neural Cluster. Please retry.");
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleDownload = async (e, doc) => {
+        e.preventDefault();
+        try {
+            const resp = await fetch(`${API_BASE}/api/download/${doc.public_id}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            if (!resp.ok) throw new Error("Download failed");
+            
+            const blob = await resp.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = doc.public_id;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error("Download error:", err);
+            alert("Secure Asset retrieval failed.");
         }
     };
 
@@ -104,16 +144,13 @@ export default function RiskAnalysisPage() {
                         <span className="text-white">{selectedDoc ? selectedDoc.public_id.split('/').pop() : 'Direct Neural Scan'}</span>
                     </div>
                     {selectedDoc && !loading && !error && (
-                        <a 
-                            href={selectedDoc.secure_url || selectedDoc.url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            download
+                        <button 
+                            onClick={(e) => handleDownload(e, selectedDoc)} 
                             className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/50 border border-slate-700 text-[9px] font-black text-rose-500 uppercase tracking-widest hover:bg-rose-500/10 hover:border-rose-500/40 transition-all shadow-xl"
                         >
                             <span className="material-symbols-outlined text-sm">cloud_download</span>
                             Download Asset
-                        </a>
+                        </button>
                     )}
                     {error && (
                         <div className="flex items-center gap-2 text-[9px] font-black text-rose-500 uppercase tracking-widest bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20">
@@ -247,16 +284,10 @@ export default function RiskAnalysisPage() {
                             </div>
 
                             <div className="space-y-4">
-                                <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Insights Pipeline</h3>
-                                {[
-                                    { icon: 'bolt', text: 'Section 4.2 deviates from market precedence by 82%.' },
-                                    { icon: 'history', text: 'Similar clauses in FY25 led to 14% litigation overhead.' },
-                                ].map((h, i) => (
-                                    <div key={i} className="p-4 rounded-xl bg-slate-800/30 border border-slate-800 flex gap-3">
-                                        <span className="material-symbols-outlined text-amber-500 text-lg">{h.icon}</span>
-                                        <p className="text-[10px] text-slate-400 font-medium leading-relaxed">{h.text}</p>
-                                    </div>
-                                ))}
+                                <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Neural Summary</h3>
+                                <div className="p-5 rounded-2xl bg-slate-800/20 border border-slate-800 text-slate-300 text-xs leading-relaxed font-medium">
+                                    {analysis.summary || "No summary available for this documentation."}
+                                </div>
                             </div>
                         </aside>
                     </div>

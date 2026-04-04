@@ -32,3 +32,4 @@ backend/lexnet.db
 /legal_document_generator/
 /NyayaSahaya-bot/
 /NyayaSahaya/
+backend/storage
