@@ -33,3 +33,5 @@ backend/lexnet.db
 /NyayaSahaya-bot/
 /NyayaSahaya/
 backend/storage
+## hardware venv
+lexnet_hardware/.venv
