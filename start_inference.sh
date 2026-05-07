@@ -29,4 +29,4 @@ echo "Model: gemma-4-E4B-it-Q3_K_M.gguf"
 # --reasoning-budget 80 --reasoning-budget-message "Answer now.": Thinking budget
 $BIN_PATH -m $MODEL_PATH -c 4096 --port 8080 -ngl 33 -cb \
   --temp 1 --top-k 64 --top-p 0.95 \
-  --reasoning-budget 80 --reasoning-budget-message "Answer now."
+  --reasoning-budget 100 --reasoning-budget-message "Answer now."
