@@ -92,6 +92,35 @@ def _build_signed_payload(card_id, name, fingerprint_id):
     }
 
 
+@app.get("/")
+@app.get("/ping")
+def ping():
+    import psutil
+    
+    # Get temperature (Raspberry Pi specific)
+    temp = 0.0
+    try:
+        with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
+            temp = float(f.read()) / 1000.0
+    except:
+        pass
+
+    stats = {
+        "cpu_load": psutil.cpu_percent(),
+        "ram_usage_gb": round(psutil.virtual_memory().used / (1024**3), 2),
+        "ram_total_gb": round(psutil.virtual_memory().total / (1024**3), 2),
+        "temperature_c": round(temp, 1),
+        "disk_io": "Active"
+    }
+    
+    return {
+        "message": "pong",
+        "status": "online",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "stats": stats
+    }
+
+
 @app.get("/users/{card_id}")
 def get_user_payload(card_id: int):
     user = rfid_module.get_user(card_id)
@@ -110,3 +139,39 @@ def get_user_payload_by_name(name: str):
 
     card_id, user_name, fingerprint_id = user
     return _build_signed_payload(card_id, user_name, fingerprint_id)
+
+
+@app.post("/authenticate")
+def authenticate(request_data: dict):
+    """Trigger physical RFID + Fingerprint scan on hardware."""
+    import rfid_module
+    import fingerprint_module
+
+    target_username = request_data.get("username", "").lower()
+    if not target_username:
+         raise HTTPException(status_code=400, detail="Target username is required for authentication")
+
+    # 1. RFID Scan (Blocking)
+    print(f"Waiting for {target_username}'s RFID tap...")
+    success, card_id, scanned_name, expected_fp = rfid_module.read_card()
+    
+    if not success:
+        raise HTTPException(status_code=401, detail="Unauthorized RFID card")
+
+    if scanned_name.lower() != target_username:
+        print(f"Identity Mismatch: Hardware belongs to {scanned_name}, but request is for {target_username}")
+        raise HTTPException(status_code=401, detail=f"Identity Mismatch: This card belongs to {scanned_name}")
+
+    # 2. Fingerprint Scan (Blocking)
+    print(f"RFID Verified for {scanned_name}. Waiting for fingerprint...")
+    fp_success, actual_fp = fingerprint_module.scan_fingerprint()
+    
+    if not fp_success:
+        raise HTTPException(status_code=401, detail="Fingerprint scan failed")
+        
+    if actual_fp != expected_fp:
+        raise HTTPException(status_code=401, detail="Fingerprint mismatch for user")
+
+    # 3. Sign and Return
+    print(f"Hardware Identity Verified: {scanned_name}")
+    return _build_signed_payload(card_id, scanned_name, actual_fp)

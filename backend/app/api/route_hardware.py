@@ -45,34 +45,26 @@ async def _proxy_post(path: str, body: dict | None, fallback: dict) -> dict:
 
 
 @router.get("/hardware/status")
-async def hardware_status(current_user: User = Depends(get_current_user)):
-    """General hardware health status for users."""
+async def get_hw_status(current_user: User = Depends(get_current_user)):
+    """Check if the RPi is currently reachable on the network."""
     return await hardware_provider.get_status()
 
 
 @router.post("/hardware/authenticate")
 async def authenticate(current_user: User = Depends(get_current_user)):
     """Trigger a biometric scan requirement on the hardware node."""
-    return await hardware_provider.request_biometric_scan(user_id=current_user.id)
+    return await hardware_provider.request_biometric_scan(username=current_user.username)
 
 
-@router.get("/hardware/heartbeat")
-async def get_heartbeat_status():
-    """Public health/telemetry endpoint for the dashboard monitor."""
-    is_on = await hardware_provider.is_online()
+@router.get("/hardware/ping")
+async def hardware_ping(current_user: User = Depends(get_current_user)):
+    """Perform a direct ping to the RPi and return the raw response."""
+    online = await hardware_provider.is_online()
     return {
-        "status": "online" if is_on else "offline",
-        "online": is_on,
-        "last_heartbeat": hardware_provider.last_heartbeat.isoformat() if hardware_provider.last_heartbeat else None,
-        "stats": hardware_provider.stats
+        "status": "online" if online else "offline",
+        "ping_response": hardware_provider.cached_stats,
+        "endpoint": "/ping"
     }
-
-
-@router.post("/hardware/heartbeat")
-async def receive_heartbeat(stats: dict):
-    """Callback for the RPi to report its metrics."""
-    await hardware_provider.update_heartbeat(stats)
-    return {"status": "success"}
 
 
 @router.post("/hardware/rfid/scan")
@@ -114,14 +106,23 @@ async def verify_on_chain(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Full on-chain verification flow."""
+    """Full on-chain verification flow with Dual-Authorization."""
+    from sqlalchemy.orm import selectinload
+    
     if not await hardware_provider.is_online():
         raise HTTPException(status_code=503, detail="Hardware bridge offline.")
 
+    # Load document with owner and shared_with relationship
     if id_or_public_id.isdigit():
-        stmt = select(DocumentLedger).where(DocumentLedger.id == int(id_or_public_id))
+        stmt = select(DocumentLedger).options(
+            selectinload(DocumentLedger.owner),
+            selectinload(DocumentLedger.shared_with)
+        ).where(DocumentLedger.id == int(id_or_public_id))
     else:
-        stmt = select(DocumentLedger).where(DocumentLedger.public_id == id_or_public_id)
+        stmt = select(DocumentLedger).options(
+            selectinload(DocumentLedger.owner),
+            selectinload(DocumentLedger.shared_with)
+        ).where(DocumentLedger.public_id == id_or_public_id)
         
     result = await db.execute(stmt)
     doc = result.scalar_one_or_none()
@@ -129,20 +130,46 @@ async def verify_on_chain(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    if doc.owner_username != current_user.username:
+    # Access Check: Current user must be either the owner or an authorized lawyer
+    is_owner = doc.owner_username == current_user.username
+    is_authorized_lawyer = any(u.username == current_user.username for u in doc.shared_with)
+    
+    if not (is_owner or is_authorized_lawyer):
         raise HTTPException(status_code=403, detail="Access denied")
 
     if doc.eth_tx_hash:
         raise HTTPException(status_code=409, detail="Already sealed")
 
+    # Dual-Authorization Logic
+    # We need a lawyer and a client.
+    client_username = doc.owner_username
+    # Find the first lawyer associated with this document
+    lawyers = [u.username for u in doc.shared_with if u.role == Role.LAWYER]
+    
+    if not lawyers:
+        raise HTTPException(status_code=400, detail="This document must be shared with a lawyer before sealing.")
+    
+    lawyer_username = lawyers[0] # Pick the primary lawyer
+
+    # --- PHASE 1: LAWYER AUTHORIZATION ---
+    await hardware_provider._broadcast("INFO", f"DUAL-AUTH PHASE 1: Waiting for Lawyer ({lawyer_username})")
+    lawyer_auth = await hardware_provider.request_biometric_scan(username=lawyer_username)
+    if lawyer_auth.get("status") != "success":
+        raise HTTPException(status_code=401, detail=f"Lawyer Authorization Failed: {lawyer_auth.get('message')}")
+
+    # --- PHASE 2: CLIENT AUTHORIZATION ---
+    await hardware_provider._broadcast("INFO", f"DUAL-AUTH PHASE 2: Waiting for Client ({client_username})")
+    client_auth = await hardware_provider.request_biometric_scan(username=client_username)
+    if client_auth.get("status") != "success":
+        raise HTTPException(status_code=401, detail=f"Client Authorization Failed: {client_auth.get('message')}")
+
+    # --- PHASE 3: BLOCKCHAIN COMMIT ---
     file_hash = doc.current_hash
-    auth_result = await hardware_provider.request_biometric_scan(user_id=current_user.id)
-
-    if auth_result.get("status") != "success":
-        raise HTTPException(status_code=401, detail="Hardware auth failed")
-
-    rpi_signature = auth_result.get("signature", f"hw_auth_{current_user.username}")
-    tx_hash = eth_service.push_to_sepolia(file_hash, rpi_signature)
+    # We use a combined signature or just the final one? 
+    # Usually, the contract might take both, but for now we anchor with the combined proof.
+    combined_proof = f"Lawyer:{lawyer_auth.get('signature')}|Client:{client_auth.get('signature')}"
+    
+    tx_hash = eth_service.push_to_sepolia(file_hash, combined_proof)
 
     doc.eth_tx_hash = tx_hash
     doc.eth_chain_id = 11155111

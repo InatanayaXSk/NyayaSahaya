@@ -209,8 +209,9 @@ export default function RiskAnalysisPage() {
                                     >
                                         <div className="flex justify-between items-start mb-2">
                                             <span className={`text-[8px] font-black uppercase tracking-[0.2em] px-2 py-0.5 rounded ${
-                                                c.risk_assessment?.includes('High') ? 'text-rose-500 bg-rose-500/10' : 
-                                                c.risk_assessment?.includes('Medium') ? 'text-amber-500 bg-amber-500/10' : 'text-emerald-500 bg-emerald-500/10'
+                                                c.risk_assessment?.toLowerCase().includes('high') ? 'text-rose-500 bg-rose-500/10 border border-rose-500/20' : 
+                                                c.risk_assessment?.toLowerCase().includes('medium') ? 'text-amber-500 bg-amber-500/10 border border-amber-500/20' : 
+                                                'text-emerald-500 bg-emerald-500/10 border border-emerald-500/20'
                                             }`}>{c.risk_assessment}</span>
                                         </div>
                                         <h4 className={`text-[11px] font-black uppercase tracking-tight truncate ${activeClause === c ? 'text-primary' : 'text-text-base'}`}>{c.title}</h4>
@@ -266,10 +267,24 @@ export default function RiskAnalysisPage() {
                                 <div className="relative pt-1">
                                     <div className="flex mb-4 items-center justify-between">
                                         <span className="text-[2rem] font-black text-text-base italic tracking-tighter">{analysis.compliance_score}%</span>
-                                        <span className="text-[10px] font-black bg-rose-500/10 text-rose-500 px-3 py-1 rounded-full uppercase tracking-tighter border border-rose-500/20">Critical review</span>
+                                        <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-tighter border ${
+                                            analysis.compliance_score < 40 ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
+                                            analysis.compliance_score < 75 ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
+                                            'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                        }`}>
+                                            {analysis.compliance_score < 40 ? 'Critical Review' :
+                                             analysis.compliance_score < 75 ? 'Standard Review' : 'High Compliance'}
+                                        </span>
                                     </div>
                                     <div className="overflow-hidden h-2.5 mb-4 text-xs flex rounded-full bg-background shadow-inner border border-border">
-                                        <div style={{ width: `${analysis.compliance_score}%` }} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-rose-500 transition-all duration-1000 shadow-[0_0_8px_rgba(244,63,94,0.4)]"></div>
+                                        <div 
+                                            style={{ width: `${analysis.compliance_score}%` }} 
+                                            className={`shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center transition-all duration-1000 ${
+                                                analysis.compliance_score < 40 ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]' :
+                                                analysis.compliance_score < 75 ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]' :
+                                                'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]'
+                                            }`}
+                                        />
                                     </div>
                                 </div>
                             </div>
