@@ -5,6 +5,7 @@
 .env.test.local
 .env.production.local
 backend/.env
+.antigravity/
 
 # Dependencies
 node_modules/

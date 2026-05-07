@@ -1,11 +1,12 @@
-from fastapi import APIRouter, HTTPException, Response, Depends
+from fastapi import APIRouter, HTTPException, Response, Depends, UploadFile, File
 from fastapi.responses import FileResponse
 import os
-from app.config import settings
+import asyncio
 from app.config import settings
 import cloudinary.utils
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from app import schemas as s
 from app.models import DocumentLedger, User, Role, document_sharing
 from app.api.route_users import get_current_user
@@ -13,8 +14,37 @@ from app.database import get_db
 from app.services.file_service import file_service
 from app.services.document_generator import generate_document_from_template
 from app.services.ai_analyzer import ai_analyzer
+import hashlib
 
 router = APIRouter()
+
+@router.get("/documents/stats")
+async def get_document_stats(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Analytics for dashboard: counts documents and sealing status."""
+    # Total docs owned by user
+    print(f"[STATS] Fetching stats for user: {current_user.username}")
+    stmt_total = select(func.count(DocumentLedger.id)).where(func.lower(DocumentLedger.owner_username) == func.lower(current_user.username))
+    res_total = await db.execute(stmt_total)
+    total_docs = res_total.scalar() or 0
+
+    # Sealed docs (have tx_hash)
+    stmt_sealed = select(func.count(DocumentLedger.id)).where(
+        func.lower(DocumentLedger.owner_username) == func.lower(current_user.username),
+        DocumentLedger.eth_tx_hash.isnot(None)
+    )
+    res_sealed = await db.execute(stmt_sealed)
+    sealed_docs = res_sealed.scalar() or 0
+    
+    print(f"[STATS] Result: total={total_docs}, sealed={sealed_docs}")
+
+    return {
+        "total_docs": total_docs,
+        "sealed_docs": sealed_docs,
+        "pending_docs": total_docs - sealed_docs
+    }
 
 @router.post("/analyze")
 async def analyze_document(request: dict, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
@@ -118,7 +148,8 @@ async def generate_document(request: s.DocumentGenerateRequest, current_user: Us
 @router.get("/documents")
 async def list_documents(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """List documents where user is owner or shared."""
-    stmt = select(DocumentLedger).where(
+    # Eager load owner to get full_name
+    stmt = select(DocumentLedger).options(selectinload(DocumentLedger.owner)).where(
         (DocumentLedger.owner_username == current_user.username) | 
         (DocumentLedger.shared_with.any(User.username == current_user.username))
     )
@@ -132,7 +163,8 @@ async def list_documents(current_user: User = Depends(get_current_user), db: Asy
             "document_type": doc.document_type,
             "created_at": doc.timestamp.isoformat(),
             "secure_url": f"{settings.STATIC_FILES_URL}/{doc.public_id}",
-            "owner": doc.owner_username
+            "owner": doc.owner_username,
+            "owner_full_name": doc.owner.full_name if doc.owner else None
         })
     
     return {"documents": documents}
@@ -172,8 +204,12 @@ async def share_document(request: dict, current_user: User = Depends(get_current
     if not public_id or not lawyer_username:
         raise HTTPException(status_code=400, detail="public_id and lawyer_username are required")
         
-    # Get document
-    result = await db.execute(select(DocumentLedger).where(DocumentLedger.public_id == public_id))
+    # Get document with shared_with relationship loaded eagerly
+    result = await db.execute(
+        select(DocumentLedger)
+        .options(selectinload(DocumentLedger.shared_with))
+        .where(DocumentLedger.public_id == public_id)
+    )
     ledger_entry = result.scalar_one_or_none()
     if not ledger_entry:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -187,14 +223,8 @@ async def share_document(request: dict, current_user: User = Depends(get_current
     if not lawyer:
         raise HTTPException(status_code=404, detail="Lawyer not found")
         
-    # Check if already shared
-    access_result = await db.execute(
-        select(document_sharing).where(
-            document_sharing.c.document_id == ledger_entry.id,
-            document_sharing.c.lawyer_id == lawyer.id
-        )
-    )
-    if not access_result.scalar_one_or_none():
+    # Check if already shared (using the eagerly loaded relationship)
+    if lawyer not in ledger_entry.shared_with:
         # Add to relationship
         ledger_entry.shared_with.append(lawyer)
         await db.commit()
@@ -227,9 +257,9 @@ async def get_document(id_or_public_id: str, current_user: User = Depends(get_cu
     """Retrieve document details from SQL Ledger & Local Storage."""
     # Handle both integer IDs and string public_ids
     if id_or_public_id.isdigit():
-        stmt = select(DocumentLedger).where(DocumentLedger.id == int(id_or_public_id))
+        stmt = select(DocumentLedger).options(selectinload(DocumentLedger.owner)).where(DocumentLedger.id == int(id_or_public_id))
     else:
-        stmt = select(DocumentLedger).where(DocumentLedger.public_id == id_or_public_id)
+        stmt = select(DocumentLedger).options(selectinload(DocumentLedger.owner)).where(DocumentLedger.public_id == id_or_public_id)
         
     result = await db.execute(stmt)
     doc = result.scalar_one_or_none()
@@ -261,7 +291,9 @@ async def get_document(id_or_public_id: str, current_user: User = Depends(get_cu
         "status": "Verified" if doc.signature_data else "Draft",
         "timestamp": doc.timestamp.isoformat(),
         "events": events,
-        "secure_url": f"{settings.STATIC_FILES_URL}/{doc.public_id}"
+        "secure_url": f"{settings.STATIC_FILES_URL}/{doc.public_id}",
+        "owner_username": doc.owner_username,
+        "owner_full_name": doc.owner.full_name if doc.owner else None
     }
 
 @router.get("/templates/{template_id}")
@@ -333,4 +365,39 @@ async def get_document_types():
                 "fields": ["executant_name", "attorney_name", "property_details"],
             },
         ]
+    }
+
+
+@router.post("/verify-upload")
+async def verify_uploaded_file(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db)
+):
+    """Compute hash of uploaded file and check DB/Blockchain status."""
+    content = await file.read()
+    file_hash = hashlib.sha256(content).hexdigest()
+    
+    # Search for this hash in the ledger
+    stmt = select(DocumentLedger).options(selectinload(DocumentLedger.owner)).where(DocumentLedger.current_hash == file_hash)
+    result = await db.execute(stmt)
+    doc = result.scalar_one_or_none()
+    
+    if not doc:
+        return {
+            "status": "not_found",
+            "message": "This document is not registered in the NyayaSahaya system.",
+            "verified": False,
+            "hash": file_hash
+        }
+        
+    return {
+        "status": "found",
+        "verified": bool(doc.eth_tx_hash),
+        "doc_id": doc.public_id,
+        "document_type": doc.document_type,
+        "owner": doc.owner.full_name if doc.owner else doc.owner_username,
+        "timestamp": doc.timestamp.isoformat(),
+        "tx_hash": doc.eth_tx_hash,
+        "hash": file_hash,
+        "etherscan_url": f"https://sepolia.etherscan.io/tx/{doc.eth_tx_hash}" if doc.eth_tx_hash else None
     }

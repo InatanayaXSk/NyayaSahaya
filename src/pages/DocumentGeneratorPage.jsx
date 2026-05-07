@@ -1,5 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
+import FocusTrap from 'focus-trap-react';
+import DOMPurify from 'dompurify';
 import { useAuth } from '../context/AuthContext';
+
+import { API_BASE } from '../utils/api';
+
 
 /* ===================== Signature Drawing Pad ===================== */
 function SignaturePad({ value, onChange, label }) {
@@ -9,8 +14,10 @@ function SignaturePad({ value, onChange, label }) {
     useEffect(() => {
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
-        ctx.strokeStyle = '#2563eb'; // Professional Ink Blue
-        ctx.lineWidth = 2.5;
+        // Get primary color from CSS variable for the ink
+        const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim() || '#3b82f6';
+        ctx.strokeStyle = `rgb(${primaryColor})`; 
+        ctx.lineWidth = 3;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
 
@@ -20,11 +27,10 @@ function SignaturePad({ value, onChange, label }) {
             img.onload = () => ctx.drawImage(img, 0, 0);
             img.src = value;
         }
-    }, []);
+    }, [value]);
 
     const getCoords = (e) => {
         const rect = canvasRef.current.getBoundingClientRect();
-        // Support both mouse and touch events
         const clientX = e.clientX || (e.touches && e.touches[0].clientX);
         const clientY = e.clientY || (e.touches && e.touches[0].clientY);
         
@@ -65,17 +71,17 @@ function SignaturePad({ value, onChange, label }) {
     };
 
     return (
-        <div className="space-y-2">
+        <div className="space-y-3">
             <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">{label}</label>
-                <button onClick={clear} className="text-[10px] font-black text-rose-500 uppercase tracking-widest hover:bg-rose-500/10 px-2 py-0.5 rounded transition-all">Clear Ink</button>
+                <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em]">{label}</label>
+                <button onClick={clear} className="text-[9px] font-black text-rose-500 uppercase tracking-widest hover:bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20 transition-all">Reset Sequence</button>
             </div>
             <div className="relative group">
                 <canvas
                     ref={canvasRef}
                     width={400}
                     height={150}
-                    className="w-full h-32 bg-slate-50 dark:bg-background-dark border-2 border-dashed border-slate-200 dark:border-border-dark rounded-2xl cursor-crosshair touch-none"
+                    className="w-full h-32 bg-background border-2 border-dashed border-border rounded-2xl cursor-crosshair touch-none transition-all group-hover:border-primary/40"
                     onMouseDown={startDrawing}
                     onMouseMove={draw}
                     onMouseUp={stopDrawing}
@@ -85,9 +91,9 @@ function SignaturePad({ value, onChange, label }) {
                     onTouchEnd={stopDrawing}
                 />
                 {!value && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20 group-hover:opacity-10 transition-opacity">
-                        <span className="material-symbols-outlined text-4xl">draw</span>
-                        <span className="text-[10px] font-black uppercase tracking-widest ml-2">Draw Signature Here</span>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none opacity-20 group-hover:opacity-10 transition-opacity">
+                        <span className="material-symbols-outlined text-4xl text-text-base">draw</span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] mt-2">Draw Cryptographic Signature</span>
                     </div>
                 )}
             </div>
@@ -107,50 +113,54 @@ function SmartWizardModal({ template, onClose, onApply, wizardSteps }) {
     if (steps.length === 0) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-white dark:bg-card-dark rounded-3xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
-                <div className="p-6 border-b border-lavender-grey/20 dark:border-border-dark flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="bg-primary p-2 rounded-xl text-white"><span className="material-symbols-outlined">magic_button</span></div>
-                        <div>
-                            <h3 className="font-bold dark:text-white">Smart Wizard</h3>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">Step {current + 1} of {steps.length}</p>
-                        </div>
-                    </div>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-border-dark rounded-xl"><span className="material-symbols-outlined dark:text-white">close</span></button>
-                </div>
-                <div className="p-8">
-                    <div className="flex gap-1 mb-8">{steps.map((_, i) => <div key={i} className={`h-1 flex-1 rounded-full ${i <= current ? 'bg-primary' : 'bg-slate-200 dark:bg-border-dark'}`} />)}</div>
-                    {step && (
-                        <div className="space-y-6">
+        <FocusTrap>
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/60 backdrop-blur-sm" onClick={onClose}>
+                <div className="bg-surface rounded-3xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden border border-border" onClick={e => e.stopPropagation()}>
+                    <div className="p-6 border-b border-border bg-surface/50 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+                                <span className="material-symbols-outlined text-primary">auto_fix</span>
+                            </div>
                             <div>
-                                <h4 className="text-lg font-bold dark:text-white mb-1">{step.title}</h4>
-                                <p className="text-sm text-slate-500 dark:text-slate-400">{step.desc}</p>
-                            </div>
-                            <div className="grid grid-cols-1 gap-3">
-                                {step.options.map(opt => (
-                                    <button key={opt} onClick={() => handleSelect(step.field, opt)}
-                                        className={`text-left px-5 py-4 rounded-2xl border-2 text-sm font-semibold transition-all ${answers[step.field] === opt ? 'border-primary bg-primary/10 text-primary dark:text-primary' : 'border-slate-200 dark:border-border-dark hover:border-primary/50 dark:text-slate-300'}`}>
-                                        {opt}
-                                    </button>
-                                ))}
+                                <h3 className="font-bold text-text-base">Smart Wizard</h3>
+                                <p className="text-xs text-text-muted">Step {current + 1} of {steps.length}</p>
                             </div>
                         </div>
-                    )}
-                </div>
-                <div className="p-6 border-t border-lavender-grey/20 dark:border-border-dark flex justify-between">
-                    <button onClick={() => current > 0 ? setCurrent(current - 1) : onClose()}
-                        className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-border-dark text-sm font-semibold dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-border-dark">
-                        {current === 0 ? 'Cancel' : 'Back'}
-                    </button>
-                    <button disabled={!answers[step?.field]}
-                        onClick={() => { if (current < steps.length - 1) setCurrent(current + 1); else { onApply(answers); onClose(); } }}
-                        className="px-6 py-2.5 rounded-xl bg-primary text-slate-900 font-bold text-sm shadow-lg shadow-primary/20 disabled:opacity-40 hover:scale-[1.02] transition-all">
-                        {current < steps.length - 1 ? 'Next' : 'Apply to Draft'}
-                    </button>
+                        <button onClick={onClose} aria-label="Close wizard" className="p-2 hover:bg-primary/10 rounded-xl transition-colors"><span className="material-symbols-outlined text-text-base">close</span></button>
+                    </div>
+                    <div className="p-8">
+                        <div className="flex gap-1 mb-8">{steps.map((_, i) => <div key={i} className={`h-1 flex-1 rounded-full ${i <= current ? 'bg-primary' : 'bg-border'}`} />)}</div>
+                        {step && (
+                            <div className="space-y-6">
+                                <div>
+                                    <h4 className="text-lg font-bold text-text-base mb-1">{step.title}</h4>
+                                    <p className="text-sm text-text-muted">{step.desc}</p>
+                                </div>
+                                <div className="grid grid-cols-1 gap-3">
+                                    {step.options.map(opt => (
+                                        <button key={opt} onClick={() => handleSelect(step.field, opt)}
+                                            className={`text-left px-5 py-4 rounded-2xl border-2 text-sm font-semibold transition-all ${answers[step.field] === opt ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:border-primary/50 text-text-muted hover:text-text-base'}`}>
+                                            {opt}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <div className="p-6 border-t border-border flex justify-between bg-surface/50">
+                        <button onClick={() => current > 0 ? setCurrent(current - 1) : onClose()}
+                            className="px-5 py-2.5 rounded-xl border border-border text-sm font-semibold text-text-muted hover:bg-primary/5 transition-colors">
+                            {current === 0 ? 'Cancel' : 'Back'}
+                        </button>
+                        <button disabled={!answers[step?.field]}
+                            onClick={() => { if (current < steps.length - 1) setCurrent(current + 1); else { onApply(answers); onClose(); } }}
+                            className="px-6 py-2.5 rounded-xl bg-primary text-slate-900 font-bold text-sm shadow-lg shadow-primary/20 disabled:opacity-40 hover:scale-[1.02] transition-all">
+                            {current < steps.length - 1 ? 'Next' : 'Apply to Draft'}
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
+        </FocusTrap>
     );
 }
 
@@ -166,39 +176,41 @@ function HistoryPanel({ onClose, onLoad }) {
         localStorage.setItem('lexnet_doc_history', JSON.stringify(next));
     };
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-white dark:bg-card-dark rounded-3xl shadow-2xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                <div className="p-6 border-b border-lavender-grey/20 dark:border-border-dark flex items-center justify-between shrink-0">
-                    <h3 className="font-bold dark:text-white flex items-center gap-2"><span className="material-symbols-outlined text-primary">history</span> Draft History</h3>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-border-dark rounded-xl"><span className="material-symbols-outlined dark:text-white">close</span></button>
-                </div>
-                <div className="flex-1 overflow-y-auto p-6 space-y-3 custom-scrollbar">
-                    {history.length === 0 && <p className="text-center text-slate-400 dark:text-slate-500 py-12 text-sm">No saved drafts yet. Generate a document and it will appear here.</p>}
-                    {history.map((h, i) => (
-                        <div key={i} className="flex items-center gap-4 p-4 rounded-2xl border border-slate-200 dark:border-border-dark hover:border-primary/50 transition-colors">
-                            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0"><span className="material-symbols-outlined text-primary">description</span></div>
-                                <div className="flex-1 min-w-0">
-                                <p className="text-sm font-bold dark:text-white truncate">{h.title}</p>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(h.timestamp).toLocaleString()}</p>
+        <FocusTrap>
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/60 backdrop-blur-sm" onClick={onClose}>
+                <div className="bg-surface rounded-3xl shadow-2xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col border border-border" onClick={e => e.stopPropagation()}>
+                    <div className="p-6 border-b border-border flex items-center justify-between shrink-0 bg-surface/50">
+                        <h3 className="font-bold text-text-base flex items-center gap-2"><span className="material-symbols-outlined text-primary">history</span> Draft History</h3>
+                        <button onClick={onClose} aria-label="Close history" className="p-2 hover:bg-primary/10 rounded-xl transition-colors"><span className="material-symbols-outlined text-text-base">close</span></button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-6 space-y-3 custom-scrollbar">
+                        {history.length === 0 && <p className="text-center text-text-muted py-12 text-sm">No saved drafts yet. Generate a document and it will appear here.</p>}
+                        {history.map((h, i) => (
+                            <div key={i} className="flex items-center gap-4 p-4 rounded-2xl border border-border hover:border-primary/50 transition-colors">
+                                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0"><span className="material-symbols-outlined text-primary">description</span></div>
+                                    <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-bold text-text-base truncate">{h.title}</p>
+                                    <p className="text-xs text-text-muted">{new Date(h.timestamp).toLocaleString()}</p>
+                                </div>
+                                <button onClick={() => { onLoad(h); onClose(); }} aria-label="Load draft" className="p-2 hover:bg-primary/10 rounded-lg text-primary transition-colors"><span className="material-symbols-outlined text-sm">open_in_new</span></button>
+                                <button onClick={() => handleDelete(i)} aria-label="Delete draft" className="p-2 hover:bg-red-500/10 rounded-lg text-red-500 transition-colors"><span className="material-symbols-outlined text-sm">delete</span></button>
                             </div>
-                            <button onClick={() => { onLoad(h); onClose(); }} className="p-2 hover:bg-primary/10 rounded-lg text-primary"><span className="material-symbols-outlined text-sm">open_in_new</span></button>
-                            <button onClick={() => handleDelete(i)} className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-red-400"><span className="material-symbols-outlined text-sm">delete</span></button>
-                        </div>
-                    ))}
+                        ))}
+                    </div>
                 </div>
             </div>
-        </div>
+        </FocusTrap>
     );
 }
 
-const inputClass = "w-full rounded-xl border-slate-200 dark:border-border-dark dark:bg-card-dark dark:text-white focus:border-primary focus:ring-primary text-sm";
-const labelClass = "text-xs font-bold text-slate-500 dark:text-slate-400";
-const sectionTitleClass = "font-bold text-slate-800 dark:text-slate-200 uppercase text-xs tracking-widest";
+const inputClass = "w-full rounded-xl border-border bg-background text-text-base focus:border-primary focus:ring-primary text-xs font-bold uppercase tracking-tight py-3 px-5 transition-all";
+const labelClass = "text-[10px] font-black text-text-muted uppercase tracking-[0.2em]";
+const sectionTitleClass = "font-black text-text-base uppercase text-[10px] tracking-[0.3em]";
 
 function SectionHeader({ number, title }) {
     return (
-        <div className="flex items-center gap-2">
-            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/20 text-primary text-xs font-bold">{number}</span>
+        <div className="flex items-center gap-3 py-2">
+            <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-primary/20 text-primary text-[10px] font-black">{number}</span>
             <h4 className={sectionTitleClass}>{title}</h4>
         </div>
     );
@@ -238,7 +250,8 @@ export default function DocumentGeneratorPage() {
 
             setIsLoadingTemplate(true);
             try {
-                const response = await fetch(`http://localhost:8000/api/templates/${selectedTemplate}`, {
+                const response = await fetch(`${API_BASE}/templates/${selectedTemplate}`, {
+
                     headers: {
                         'Authorization': `Bearer ${token}`
                     }
@@ -292,10 +305,10 @@ export default function DocumentGeneratorPage() {
                     // Render Signature Image
                     updatedContent = updatedContent.replace(new RegExp(escapedPlaceholder, 'g'), `<img src="${value}" class="inline-block max-h-12 align-middle border-b border-primary/30" />`);
                 } else {
-                    updatedContent = updatedContent.replace(new RegExp(escapedPlaceholder, 'g'), `<span class="bg-primary/20 px-1 font-bold text-slate-900">${value}</span>`);
+                    updatedContent = updatedContent.replace(new RegExp(escapedPlaceholder, 'g'), `<span class="bg-primary/10 px-1 font-bold text-primary border border-primary/20 rounded-sm">${value}</span>`);
                 }
             } else {
-                updatedContent = updatedContent.replace(new RegExp(escapedPlaceholder, 'g'), `<span class="bg-slate-100 text-slate-400 border-b border-dashed border-slate-300 px-1">${placeholder}</span>`);
+                updatedContent = updatedContent.replace(new RegExp(escapedPlaceholder, 'g'), `<span class="bg-surface border-b border-dashed border-border text-text-muted px-1 opacity-50">${placeholder}</span>`);
             }
         });
         setPreviewContent(updatedContent);
@@ -316,7 +329,8 @@ export default function DocumentGeneratorPage() {
                 data: formData,
             };
             
-            const response = await fetch('http://localhost:8000/api/generate-doc', {
+            const response = await fetch(`${API_BASE}/generate-doc`, {
+
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
@@ -363,57 +377,57 @@ export default function DocumentGeneratorPage() {
     };
 
     return (
-        <div className="max-w-[1600px] mx-auto p-6 lg:p-10">
+        <div className="max-w-[1600px] mx-auto p-6 lg:p-10 bg-background min-h-screen text-text-base">
             {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-12">
                 <div>
-                    <nav className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 mb-2">
+                    <nav className="flex items-center gap-2 text-[10px] text-text-muted mb-4 uppercase font-black tracking-widest">
                         <span>Legal Tools</span>
-                        <span className="material-symbols-outlined text-xs">chevron_right</span>
-                        <span className="text-primary font-medium">AI Document Generator</span>
+                        <span className="material-symbols-outlined text-[14px]">chevron_right</span>
+                        <span className="text-primary">AI Document Generator</span>
                     </nav>
-                    <h1 className="text-4xl font-extrabold tracking-tight dark:text-white">Generate Legal Instrument</h1>
+                    <h1 className="text-5xl font-black uppercase tracking-tight">Generate Legal <span className="text-primary">Instrument</span></h1>
                 </div>
-                <div className="flex gap-3">
-                    <button onClick={() => setShowHistory(true)} className="px-5 py-2.5 rounded-xl border border-lavender-grey dark:border-border-dark font-semibold text-sm hover:bg-white dark:hover:bg-card-dark transition-all flex items-center gap-2 dark:text-slate-300">
-                        <span className="material-symbols-outlined text-lg">history</span> History
+                <div className="flex gap-4">
+                    <button onClick={() => setShowHistory(true)} className="px-6 py-3 rounded-2xl border border-border font-black text-[10px] uppercase tracking-[0.2em] hover:bg-surface transition-all flex items-center gap-3 text-text-muted hover:text-text-base">
+                        <span className="material-symbols-outlined text-lg">history</span> Sequence History
                     </button>
-                    <button onClick={() => setShowWizard(true)} className="px-5 py-2.5 rounded-xl bg-primary text-slate-900 font-bold text-sm shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all flex items-center gap-2">
-                        <span className="material-symbols-outlined text-lg">magic_button</span> Smart Wizard
+                    <button onClick={() => setShowWizard(true)} className="px-6 py-3 rounded-2xl bg-primary text-slate-900 font-black text-[10px] uppercase tracking-[0.3em] shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-3">
+                        <span className="material-symbols-outlined text-lg">magic_button</span> Neural Wizard
                     </button>
                 </div>
             </div>
 
             {/* Template Selector */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
                 {templates.map(t => (
                     <button key={t.id} onClick={() => setSelectedTemplate(t.id)}
-                        className={`flex flex-col items-center gap-3 p-6 rounded-2xl bg-white dark:bg-card-dark shadow-sm hover:shadow-md transition-all group ${selectedTemplate === t.id ? 'border-2 border-primary' : 'border border-lavender-grey/40 dark:border-border-dark hover:border-primary/50'}`}>
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${selectedTemplate === t.id ? 'bg-primary text-white' : 'bg-slate-100 dark:bg-background-dark text-slate-500 dark:text-slate-400 group-hover:bg-primary/10 group-hover:text-primary'}`}>
+                        className={`flex flex-col items-center gap-4 p-8 rounded-[2rem] bg-surface shadow-sm hover:shadow-xl transition-all group border-2 ${selectedTemplate === t.id ? 'border-primary' : 'border-border hover:border-primary/30'}`}>
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${selectedTemplate === t.id ? 'bg-primary text-slate-900' : 'bg-background text-text-muted group-hover:bg-primary/10 group-hover:text-primary'}`}>
                             <span className="material-symbols-outlined text-3xl">{t.icon}</span>
                         </div>
-                        <span className={`font-bold ${selectedTemplate === t.id ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'}`}>{t.name}</span>
+                        <span className={`text-[11px] font-black uppercase tracking-[0.2em] ${selectedTemplate === t.id ? 'text-text-base' : 'text-text-muted group-hover:text-text-base'}`}>{t.name}</span>
                     </button>
                 ))}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8" style={{ minHeight: 700 }}>
                 {/* Form Side */}
-                <div className="lg:col-span-5 bg-white dark:bg-card-dark rounded-3xl border border-lavender-grey/30 dark:border-border-dark shadow-xl flex flex-col overflow-hidden">
-                    <div className="p-6 border-b border-lavender-grey/20 dark:border-border-dark flex items-center justify-between">
-                        <h3 className="font-bold text-lg dark:text-white">Document Details</h3>
+                <div className="lg:col-span-5 bg-surface rounded-[2.5rem] border border-border shadow-2xl flex flex-col overflow-hidden">
+                    <div className="p-8 border-b border-border flex items-center justify-between bg-surface/50">
+                        <h3 className="font-black uppercase tracking-[0.2em] text-xs text-text-base">Document Parameters</h3>
                         <button 
                             onClick={() => {
-                                if(confirm("Clear current draft?")) {
+                                if(confirm("Discard current draft sequence?")) {
                                     const empty = {};
                                     templateData.placeholders.forEach(p => empty[p] = '');
                                     setFormData(empty);
                                     localStorage.removeItem(`lexnet_draft_${selectedTemplate}`);
                                 }
                             }}
-                            className="text-[10px] font-black text-rose-500 uppercase tracking-widest bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20 hover:bg-rose-500/20 transition-all"
+                            className="text-[9px] font-black text-rose-500 uppercase tracking-widest bg-rose-500/10 px-4 py-1.5 rounded-full border border-rose-500/20 hover:bg-rose-500/20 transition-all"
                         >
-                            Reset Draft
+                            Purge Draft
                         </button>
                     </div>
                     <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-6">
@@ -450,43 +464,54 @@ export default function DocumentGeneratorPage() {
                             </div>
                         )}
                     </div>
-                    <div className="p-6 border-t border-lavender-grey/20 dark:border-border-dark bg-slate-50 dark:bg-background-dark flex flex-col gap-3">
-                        <button onClick={handleGenerate} disabled={isGenerating} className="w-full py-4 bg-primary text-slate-900 font-black rounded-2xl shadow-xl shadow-primary/30 hover:shadow-2xl hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-sm disabled:opacity-60">
-                            <span className="material-symbols-outlined font-bold">{isGenerating ? 'hourglass_top' : 'article'}</span>
-                            {isGenerating ? 'Generating...' : 'Generate & Store in Cloud'}
+                    <div className="p-8 border-t border-border bg-background/50 flex flex-col gap-4">
+                        <button onClick={handleGenerate} disabled={isGenerating} className="w-full py-5 bg-primary text-slate-900 font-black rounded-2xl shadow-xl shadow-primary/20 hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-4 uppercase tracking-[0.3em] text-[10px] disabled:opacity-50">
+                            <span className="material-symbols-outlined font-black">{isGenerating ? 'hourglass_top' : 'cloud_upload'}</span>
+                            {isGenerating ? 'Synthesizing Document...' : 'Generate & Secure'}
                         </button>
                         
                         {lastDownloadUrl && (
                             <a 
                                 href={lastDownloadUrl}
                                 download
-                                className="w-full py-3 bg-white dark:bg-card-dark text-primary border-2 border-primary rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-primary/5 transition-all text-sm decoration-none"
+                                className="w-full py-4 bg-surface text-primary border-2 border-primary/20 rounded-2xl font-black flex items-center justify-center gap-3 hover:bg-primary/5 transition-all text-[10px] uppercase tracking-[0.2em] decoration-none"
                             >
                                 <span className="material-symbols-outlined">download_for_offline</span>
-                                Download Final PDF
+                                Download Final Asset
                             </a>
                         )}
                     </div>
                 </div>
 
                 {/* Preview Side */}
-                <div className="lg:col-span-7 bg-slate-900/5 dark:bg-slate-900/30 rounded-3xl border-2 border-dashed border-lavender-grey/40 dark:border-border-dark flex flex-col overflow-hidden relative">
-                    <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-10">
-                        <div className="flex items-center gap-2 bg-white/90 dark:bg-card-dark/90 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-lg border border-white/40 dark:border-border-dark">
-                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Live Preview</span>
-                            <div className="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
+                <div className="lg:col-span-7 bg-surface/50 rounded-[2.5rem] border-2 border-dashed border-border flex flex-col overflow-hidden relative shadow-inner">
+                    <div className="absolute top-6 left-6 right-6 flex items-center justify-between z-10">
+                        <div className="flex items-center gap-3 bg-background/80 backdrop-blur-xl px-5 py-2 rounded-2xl shadow-2xl border border-border">
+                            <span className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em]">Live Neural Preview</span>
+                            <div className="w-2 h-2 bg-primary rounded-full animate-pulse shadow-[0_0_10px_rgba(var(--color-primary),0.8)]"></div>
                         </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-12 custom-scrollbar flex justify-center bg-slate-200/50 dark:bg-background-dark/50">
-                        <div ref={previewRef} className="bg-white w-full max-w-[650px] min-h-[1000px] shadow-2xl rounded-sm p-16 flex flex-col gap-8 text-slate-800">
-                             <div className="text-center space-y-2 mb-4">
-                                <h2 className="text-xl font-bold uppercase tracking-widest border-b-2 border-slate-800 pb-2">{templates.find(t=>t.id===selectedTemplate)?.name}</h2>
-                                <p className="text-[10px] text-slate-400">DRAFT GENERATED VIA LEXNET AI ENGINE v4.2</p>
+                    <div className="flex-1 overflow-y-auto p-12 custom-scrollbar flex justify-center bg-background/30 backdrop-blur-sm">
+                        <div ref={previewRef} className="bg-surface w-full max-w-[650px] min-h-[1000px] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.3)] rounded-lg p-20 flex flex-col gap-10 text-text-base border border-border">
+                             <div className="text-center space-y-3 mb-8 border-b-4 border-double border-border pb-8">
+                                <h2 className="text-2xl font-black uppercase tracking-[0.3em]">{templates.find(t=>t.id===selectedTemplate)?.name}</h2>
+                                <p className="text-[9px] text-text-muted font-black tracking-[0.4em]">ENCRYPTED DRAFT // AI_ENGINE_V4.2 // NYAYASAHAYA</p>
                             </div>
-                            <div className="whitespace-pre-wrap text-sm leading-relaxed text-justify outline-none" contentEditable suppressContentEditableWarning onBlur={(e) => setPreviewContent(e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: previewContent }} />
-                            <div className="mt-auto flex justify-between items-end opacity-20">
-                                <div className="flex items-center gap-1"><span className="material-symbols-outlined text-4xl">verified_user</span><div className="text-[8px] font-bold">AUTHENTICATED<br />LEXNET DRAFT</div></div>
-                                <div className="w-24 h-24 bg-slate-200 rounded-sm flex items-center justify-center"><span className="material-symbols-outlined text-4xl">qr_code_2</span></div>
+                            <div 
+                                className="whitespace-pre-wrap text-sm leading-relaxed text-justify outline-none selection:bg-primary/30" 
+                                contentEditable 
+                                suppressContentEditableWarning 
+                                onBlur={(e) => setPreviewContent(e.currentTarget.innerHTML)} 
+                                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewContent) }} 
+                            />
+                            <div className="mt-auto pt-12 flex justify-between items-end opacity-10 grayscale border-t border-border">
+                                <div className="flex items-center gap-3">
+                                    <span className="material-symbols-outlined text-6xl">verified_user</span>
+                                    <div className="text-[10px] font-black uppercase tracking-widest leading-tight">AUTHENTICATED<br />LEDGER DRAFT</div>
+                                </div>
+                                <div className="w-28 h-28 bg-background rounded-lg flex items-center justify-center border border-border">
+                                    <span className="material-symbols-outlined text-6xl text-text-muted">qr_code_2</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -494,15 +519,15 @@ export default function DocumentGeneratorPage() {
             </div>
 
             {/* Floating Footer */}
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 dark:bg-card-dark text-white px-6 py-3 rounded-full flex items-center gap-8 shadow-2xl z-50 dark:border dark:border-border-dark animate-in slide-in-from-bottom-5 duration-500">
-                <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
-                    <span className="text-[10px] font-black tracking-widest uppercase opacity-70">Neural Auth: Local Draft Secure</span>
+            <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-surface text-text-base px-8 py-4 rounded-3xl flex items-center gap-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50 border border-border/50 backdrop-blur-xl animate-in slide-in-from-bottom-10 duration-700">
+                <div className="flex items-center gap-3">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_15px_rgba(16,185,129,0.8)]"></span>
+                    <span className="text-[10px] font-black tracking-[0.3em] uppercase opacity-60">Neural Node: Online</span>
                 </div>
-                <div className="h-4 w-px bg-white/10"></div>
-                <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-primary text-lg font-black">verified</span>
-                    <span className="text-[10px] font-black tracking-widest uppercase tracking-[0.2em]">Ready for Generation</span>
+                <div className="h-6 w-px bg-border"></div>
+                <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-primary text-2xl font-black">verified</span>
+                    <span className="text-[10px] font-black tracking-[0.3em] uppercase">Draft Immutable</span>
                 </div>
             </div>
 

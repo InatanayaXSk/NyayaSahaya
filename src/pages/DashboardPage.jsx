@@ -1,35 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { mapUserName } from '../utils/userMapping';
 
-const API_BASE = 'http://localhost:8000/api';
+import { API_BASE } from '../utils/api';
+
 
 const metrics = [
-    { label: 'Total Documents', icon: 'folder_open', key: 'active_cases', trendKey: 'active_cases_trend', color: 'border-t-dash-primary' },
-    { label: 'Docs Processed', icon: 'description', key: 'docs_processed', trendKey: 'docs_trend', color: 'border-t-dash-secondary' },
-    { label: 'Signatures', icon: 'draw', key: 'critical_risks', trendKey: 'risks_trend', color: 'border-t-dash-accent' },
-    { label: 'Audit Events', icon: 'history', key: 'pending_reviews', trendKey: 'reviews_trend', color: 'border-t-dash-neutral-dim' },
+    { label: 'Total Vault Documents', icon: 'folder_open', key: 'total_docs', color: 'primary' },
+    { label: 'Blockchain Sealed', icon: 'verified_user', key: 'sealed_docs', color: 'primary/60' },
+    { label: 'Pending Sealing', icon: 'lock_open', key: 'pending_docs', color: 'primary/30' },
+    { label: 'System Health', icon: 'monitor_heart', key: 'health', color: 'border' },
 ];
 
 const defaultStats = {
-    active_cases: 142, active_cases_trend: '+5%',
-    docs_processed: '12,450', docs_trend: '+12%',
-    critical_risks: 3, risks_trend: '-2%',
-    pending_reviews: 28, reviews_trend: '-1%',
-    recent_activity: [
-        { case_ref: 'LX-2023-0891', status: 'In Review', last_update: '2 hours ago', assigned_to: 'J. Smith' },
-        { case_ref: 'LX-2023-0890', status: 'Flagged', last_update: '5 hours ago', assigned_to: 'A. Davis' },
-        { case_ref: 'LX-2023-0888', status: 'Processed', last_update: '1 day ago', assigned_to: 'System' },
-    ],
+    total_docs: 0,
+    sealed_docs: 0,
+    pending_docs: 0,
+    health: '100%',
+    recent_activity: [],
 };
 
 function StatusBadge({ status }) {
     const styles = {
-        'In Review': 'bg-slate-200 text-slate-700',
-        'Flagged': 'bg-dash-secondary/20 text-dash-secondary border border-dash-secondary/20',
-        'Processed': 'bg-dash-primary/20 text-dash-primary border border-dash-primary/20',
+        'Draft': 'bg-background border border-border text-text-muted',
+        'In Review': 'bg-background border border-border text-text-muted',
+        'Verified': 'bg-primary/10 text-primary border border-primary/20',
+        'Flagged': 'bg-rose-500/10 text-rose-500 border border-rose-500/20',
+        'Processed': 'bg-primary/10 text-primary border border-primary/20',
     };
     return (
-        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${styles[status] || 'bg-slate-100 text-slate-600'}`}>
+        <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${styles[status] || 'bg-background text-text-muted'}`}>
             {status}
         </span>
     );
@@ -37,138 +38,236 @@ function StatusBadge({ status }) {
 
 export default function DashboardPage() {
     const [stats, setStats] = useState(defaultStats);
+    const [documents, setDocuments] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const navigate = useNavigate();
 
     const { token } = useAuth();
 
     useEffect(() => {
         if (!token) return;
+        setLoading(true);
 
-        fetch(`${API_BASE}/dashboard/stats`, {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        })
-            .then(r => r.json())
-            .then(data => setStats({ ...defaultStats, ...data }))
-            .catch(() => { });
+        const fetchStats = fetch(`${API_BASE}/documents/stats`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        }).then(r => r.json());
+
+        const fetchDocs = fetch(`${API_BASE}/documents`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        }).then(r => r.json());
+
+        Promise.all([fetchStats, fetchDocs])
+            .then(([statsData, docsData]) => {
+                setStats(prev => ({ ...prev, ...statsData }));
+                if (docsData.documents) {
+                    setDocuments(docsData.documents);
+                }
+            })
+            .catch(err => console.error("Dashboard Fetch Error:", err))
+            .finally(() => setLoading(false));
     }, [token]);
 
     return (
-        <div className="max-w-[1200px] mx-auto px-6 lg:px-10 py-8 space-y-8">
+        <div className="max-w-[1200px] mx-auto px-6 lg:px-10 py-8 space-y-8 bg-background text-text-base">
             {/* Header */}
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
-                    <h1 className="text-dash-primary dark:text-primary font-serif-display text-4xl font-bold leading-tight">Operations Dashboard</h1>
-                    <p className="text-slate-500 dark:text-slate-400 mt-2 text-sm">Overview of current caseload and system performance.</p>
+                    <h1 className="text-primary font-serif-display text-4xl font-black uppercase tracking-tight">Operations <span className="text-text-base">Dashboard</span></h1>
+                    <p className="text-text-muted mt-2 text-sm max-w-xl">Comprehensive overview of document lifecycle, cryptographic sealing status, and real-time ledger health monitoring.</p>
                 </div>
-                <button className="flex items-center justify-center rounded bg-dash-primary hover:bg-dash-neutral-dim text-white h-10 px-6 font-medium shadow-sm transition-colors gap-2">
+                <button 
+                    onClick={() => navigate('/document-generator')}
+                    className="flex items-center justify-center rounded-xl bg-primary text-slate-900 h-12 px-8 font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all gap-2"
+                >
                     <span className="material-symbols-outlined" style={{ fontSize: 20 }}>add_circle</span>
-                    <span>New Case</span>
+                    <span>New Document</span>
                 </button>
             </div>
 
             {/* Metrics Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {metrics.map(m => (
-                    <div key={m.key} className={`flex flex-col gap-3 rounded bg-white dark:bg-card-dark p-6 border border-slate-200 dark:border-border-dark shadow-sm border-t-4 ${m.color}`}>
+                    <div key={m.key} className="flex flex-col gap-3 rounded-3xl bg-surface p-6 border border-border shadow-sm border-t-4 border-t-primary">
                         <div className="flex justify-between items-start">
-                            <p className="text-slate-500 dark:text-slate-400 text-sm font-semibold uppercase tracking-wider">{m.label}</p>
-                            <span className="material-symbols-outlined text-dash-primary/60" style={{ fontSize: 24 }}>{m.icon}</span>
+                            <p className="text-text-muted text-[10px] font-black uppercase tracking-[0.2em]">{m.label}</p>
+                            <span className="material-symbols-outlined text-primary/60" style={{ fontSize: 24 }}>{m.icon}</span>
                         </div>
-                        <p className="text-dash-primary dark:text-primary font-serif-display text-3xl font-bold">
-                            {typeof stats[m.key] === 'number' ? stats[m.key].toLocaleString() : stats[m.key]}
-                        </p>
-                        <p className={`text-sm font-medium flex items-center gap-1 ${stats[m.trendKey]?.startsWith('+') ? 'text-green-700' : 'text-green-700'}`}>
-                            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
-                                {stats[m.trendKey]?.startsWith('+') ? 'trending_up' : 'trending_down'}
-                            </span>
-                            {stats[m.trendKey]} vs last month
+                        {loading ? (
+                            <div className="h-9 w-24 bg-background animate-pulse rounded"></div>
+                        ) : (
+                            <p className="text-primary font-serif-display text-3xl font-black">
+                                {stats[m.key] === undefined || stats[m.key] === null ? 'Error' : 
+                                 typeof stats[m.key] === 'number' ? stats[m.key].toLocaleString() : stats[m.key]}
+                            </p>
+                        )}
+                        <p className="text-xs text-slate-400 font-medium italic">
+                            Live system status
                         </p>
                     </div>
                 ))}
             </div>
 
-            {/* Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Processing Volume */}
-                <div className="flex flex-col gap-3 rounded bg-white dark:bg-card-dark p-6 border border-slate-200 dark:border-border-dark shadow-sm border-t-4 border-t-dash-primary">
-                    <div className="flex justify-between items-end border-b border-slate-200 dark:border-border-dark pb-4">
-                        <div>
-                            <h3 className="text-dash-primary dark:text-primary font-serif-display text-xl font-bold">Processing Volume</h3>
-                            <p className="text-slate-500 dark:text-slate-400 text-sm">Last 30 Days</p>
+            {/* Dashboard Secondary Stats */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Secondary Metrics / Lifecycle Tracker */}
+                <div className="lg:col-span-8 space-y-8">
+                    <div className="bg-surface rounded-[2.5rem] border border-border p-10 shadow-sm relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-1000"></div>
+                        <div className="flex items-center justify-between mb-10">
+                            <div>
+                                <h3 className="text-xl font-black uppercase tracking-tight">Document Integrity Lifecycle</h3>
+                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted mt-1 italic">Real-time cryptographic verification tracking</p>
+                            </div>
+                            <div className="px-4 py-1.5 bg-primary/10 rounded-full border border-primary/20">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-primary">System Nominal</span>
+                            </div>
                         </div>
-                        <div className="text-right">
-                            <p className="text-dash-primary dark:text-primary font-serif-display text-2xl font-bold">12,450</p>
-                            <p className="text-green-700 text-xs font-medium">+12%</p>
-                        </div>
-                    </div>
-                    <div className="relative h-48 mt-4">
-                        <div className="absolute inset-0 flex items-end justify-between gap-2 px-2">
-                            {[40, 60, 45, 80, 65, 90, 100].map((h, i) => (
-                                <div key={i} className="w-full bg-dash-primary/30 hover:bg-dash-primary/60 rounded-t transition-colors" style={{ height: `${h}%` }}></div>
-                            ))}
-                        </div>
-                        <div className="absolute bottom-0 w-full flex justify-between text-xs text-slate-500 border-t border-slate-200 pt-2 mt-2">
-                            <span>Wk 1</span><span>Wk 2</span><span>Wk 3</span><span>Wk 4</span>
+                        
+                        <div className="space-y-10">
+                            <div className="space-y-3">
+                                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-text-muted">
+                                    <span>Blockchain Sealing Completion</span>
+                                    <span className="text-primary">88%</span>
+                                </div>
+                                <div className="h-2 w-full bg-background rounded-full overflow-hidden p-0.5 border border-border">
+                                    <div className="h-full bg-primary rounded-full shadow-[0_0_15px_rgba(var(--color-primary),0.5)]" style={{ width: '88%' }}></div>
+                                </div>
+                            </div>
+                            <div className="space-y-3">
+                                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-text-muted">
+                                    <span>Neural Analysis Coverage</span>
+                                    <span className="text-primary/60">94%</span>
+                                </div>
+                                <div className="h-2 w-full bg-background rounded-full overflow-hidden p-0.5 border border-border">
+                                    <div className="h-full bg-primary/60 rounded-full shadow-[0_0_15px_rgba(var(--color-primary),0.3)]" style={{ width: '94%' }}></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Risk Distribution */}
-                <div className="flex flex-col gap-3 rounded bg-white dark:bg-card-dark p-6 border border-slate-200 dark:border-border-dark shadow-sm border-t-4 border-t-dash-secondary">
-                    <div className="flex justify-between items-end border-b border-slate-200 dark:border-border-dark pb-4">
-                        <div>
-                            <h3 className="text-dash-primary dark:text-primary font-serif-display text-xl font-bold">Risk Distribution</h3>
-                            <p className="text-slate-500 dark:text-slate-400 text-sm">Current Active Cases</p>
+                {/* Quick Actions / Status Pulse */}
+                <div className="lg:col-span-4 space-y-6">
+                    <div className="bg-surface rounded-[2.5rem] border border-border p-8 shadow-sm">
+                        <div className="flex items-center justify-between mb-8">
+                            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-text-muted">Neural Health</h3>
+                            <div className="w-2.5 h-2.5 rounded-full bg-primary shadow-[0_0_10px_rgba(var(--color-primary),0.8)] animate-pulse"></div>
                         </div>
-                        <div className="text-right">
-                            <p className="text-dash-primary font-serif-display text-2xl font-bold">34</p>
-                            <p className="text-dash-secondary text-xs font-medium">Flagged Items</p>
+                        <div className="space-y-6">
+                            <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-black uppercase tracking-widest text-text-muted">Blockchain Sync</span>
+                                <span className="text-xs font-mono font-bold text-primary">100%</span>
+                            </div>
+                            <div className="h-1.5 bg-background rounded-full overflow-hidden">
+                                <div className="h-full bg-primary w-[100%] shadow-[0_0_8px_rgba(var(--color-primary),0.5)]"></div>
+                            </div>
                         </div>
-                    </div>
-                    <div className="relative h-48 mt-4 flex items-center justify-center">
-                        <div className="w-32 h-32 rounded-full border-8 border-dash-primary relative flex items-center justify-center">
-                            <span className="font-serif-display font-bold text-xl">142</span>
-                        </div>
-                    </div>
-                    <div className="flex justify-center gap-4 text-xs text-slate-500 mt-2">
-                        <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-dash-primary"></span> Low</div>
-                        <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-dash-secondary"></span> Medium</div>
-                        <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-dash-accent"></span> High/Critical</div>
+                        <button 
+                            onClick={() => navigate('/bridge-monitor')}
+                            className="w-full mt-8 py-4 bg-background border border-border rounded-2xl text-[10px] font-black uppercase tracking-widest hover:border-primary/50 hover:text-primary transition-all hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                            Open Bridge Monitor
+                        </button>
                     </div>
                 </div>
             </div>
 
-            {/* Recent Activity Table */}
-            <div className="rounded bg-white dark:bg-card-dark border border-slate-200 dark:border-border-dark shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-slate-200 dark:border-border-dark bg-slate-50 dark:bg-background-dark">
-                    <h3 className="text-dash-primary dark:text-primary font-serif-display text-xl font-bold">Recent Activity</h3>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Managed Vault Assets */}
+                <div className="lg:col-span-8 space-y-4">
+                    <div className="flex items-center justify-between px-4">
+                        <h2 className="text-xs font-black uppercase tracking-[0.2em] text-text-muted">Managed Vault Assets</h2>
+                        <button onClick={() => navigate('/verify')} className="text-[10px] font-black uppercase tracking-widest text-primary hover:underline">View Ledger</button>
+                    </div>
+                    
+                    <div className="bg-surface rounded-3xl border border-border/30 overflow-hidden shadow-sm">
+                        {loading ? (
+                            <div className="p-12 flex flex-col items-center justify-center space-y-4">
+                                <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-text-muted animate-pulse">Syncing with Node...</p>
+                            </div>
+                        ) : documents.length > 0 ? (
+                            <div className="divide-y divide-border/20">
+                                {documents.slice(0, 6).map((doc, idx) => (
+                                    <div key={idx} className="flex items-center justify-between p-6 hover:bg-background/50 transition-colors group">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 rounded-2xl bg-primary/5 flex items-center justify-center border border-primary/10 group-hover:bg-primary/10 transition-all">
+                                                <span className="material-symbols-outlined text-primary text-2xl">description</span>
+                                            </div>
+                                            <div>
+                                                <h4 className="font-black text-sm uppercase tracking-tight mb-1 group-hover:text-primary transition-colors">{doc.public_id.split('/').pop()}</h4>
+                                                <p className="text-[10px] font-mono text-text-muted">SEAL_ID: {doc.public_id.slice(0, 12)}...</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-6">
+                                            <div className="hidden md:block text-right">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-text-muted mb-1">Status</p>
+                                                <StatusBadge status={doc.sealed ? 'Verified' : 'Processed'} />
+                                            </div>
+                                            <button 
+                                                onClick={() => navigate(`/documents/${encodeURIComponent(doc.public_id)}`)}
+                                                className="w-10 h-10 rounded-xl bg-background border border-border flex items-center justify-center hover:border-primary/50 hover:text-primary transition-all"
+                                            >
+                                                <span className="material-symbols-outlined text-xl">open_in_new</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="p-20 text-center">
+                                <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center mx-auto mb-4 border border-border">
+                                    <span className="material-symbols-outlined text-text-muted text-3xl">inventory_2</span>
+                                </div>
+                                <p className="text-xs font-black uppercase tracking-widest text-text-muted">No documents found in encrypted storage.</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm">
-                        <thead className="bg-white dark:bg-card-dark text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-border-dark uppercase text-xs tracking-wider font-semibold">
-                            <tr>
-                                <th className="px-6 py-4">Case Ref</th>
-                                <th className="px-6 py-4">Status</th>
-                                <th className="px-6 py-4">Last Update</th>
-                                <th className="px-6 py-4">Assigned To</th>
-                                <th className="px-6 py-4 text-right">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {stats.recent_activity.map((row, i) => (
-                                <tr key={i} className="hover:bg-slate-50 dark:hover:bg-background-dark transition-colors">
-                                    <td className="px-6 py-4 font-medium text-dash-primary dark:text-primary">{row.case_ref}</td>
-                                    <td className="px-6 py-4"><StatusBadge status={row.status} /></td>
-                                    <td className="px-6 py-4 text-slate-500 dark:text-slate-400">{row.last_update}</td>
-                                    <td className="px-6 py-4">{row.assigned_to}</td>
-                                    <td className="px-6 py-4 text-right">
-                                        <button className="text-dash-primary hover:text-dash-secondary font-medium">View</button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+
+                {/* Network Health & Activity */}
+                <div className="lg:col-span-4 space-y-6">
+                    <div className="bg-surface rounded-3xl border border-border p-8 shadow-sm">
+                        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-text-base mb-6 flex items-center gap-2">
+                            <span className="material-symbols-outlined text-sm text-primary">hub</span> Network Status
+                        </h3>
+                        <div className="space-y-6">
+                            <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-black uppercase tracking-widest text-text-muted">Node Latency</span>
+                                <span className="text-xs font-mono font-bold text-primary">12ms</span>
+                            </div>
+                            <div className="h-1.5 bg-background rounded-full overflow-hidden">
+                                <div className="h-full bg-primary w-[94%] shadow-[0_0_8px_rgba(var(--color-primary),0.5)]"></div>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-black uppercase tracking-widest text-text-muted">Blockchain Sync</span>
+                                <span className="text-xs font-mono font-bold text-primary">100%</span>
+                            </div>
+                            <div className="h-1.5 bg-background rounded-full overflow-hidden">
+                                <div className="h-full bg-primary w-[100%] shadow-[0_0_8px_rgba(var(--color-primary),0.5)]"></div>
+                            </div>
+                        </div>
+                        <button 
+                            onClick={() => navigate('/bridge-monitor')}
+                            className="w-full mt-8 py-3 bg-background border border-border rounded-xl text-[10px] font-black uppercase tracking-widest hover:border-primary/50 hover:text-primary transition-all"
+                        >
+                            Open Bridge Monitor
+                        </button>
+                    </div>
+
+                    <div className="bg-primary/5 border border-primary/20 rounded-3xl p-8 relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-primary/10 rounded-full -mr-12 -mt-12 group-hover:scale-150 transition-transform duration-700"></div>
+                        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-primary mb-4 relative z-10">Neural Analysis</h3>
+                        <p className="text-[11px] text-text-muted leading-relaxed mb-6 relative z-10">
+                            The LexAI engine has processed 4 critical risk flags in your latest contract drafts. Summary reports are available in the Risk Hub.
+                        </p>
+                        <button 
+                            onClick={() => navigate('/risk-analysis')}
+                            className="px-5 py-2 bg-primary text-background rounded-lg text-[10px] font-black uppercase tracking-widest relative z-10"
+                        >
+                            Review Risks
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

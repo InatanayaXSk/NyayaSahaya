@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
+import { BASE_URL } from "../../utils/api";
+
 import ReactMarkdown from 'react-markdown';
 import { useAuth } from "../../context/AuthContext";
 import { useClient } from "../../context/ClientContext";
@@ -14,7 +16,7 @@ function Chatbot() {
   const { activeDocument } = useClient();
   const [useContext, setUseContext] = useState(true);
 
-  const BASE_URL = "http://localhost:8000";
+
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -107,18 +109,18 @@ function Chatbot() {
   };
 
   return (
-    <div className="flex flex-col w-full h-full bg-[#0a0a14]/95 backdrop-blur-3xl text-slate-200 shadow-2xl">
+    <div className="flex flex-col h-full bg-background/60 backdrop-blur-xl border-l border-border relative overflow-hidden">
       {/* Header */}
-      <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-black/20">
+      <div className="p-4 border-b border-border bg-surface/50 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center border border-primary/30">
-            <span className="material-symbols-outlined text-primary text-xl">psychology</span>
+                <span className="material-symbols-outlined text-primary text-xl">smart_toy</span>
             </div>
             <div>
-            <h3 className="font-black text-[11px] text-white uppercase tracking-widest leading-tight">LexAI Assistant</h3>
+            <h3 className="font-black text-[11px] text-text-base uppercase tracking-widest leading-tight">LexAI Assistant</h3>
             <div className="flex items-center gap-1.5 mt-0.5">
                 <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${activeDocument && useContext ? 'bg-rose-500' : 'bg-emerald-500'}`}></span>
-                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                <span className="text-[8px] font-black text-text-muted uppercase tracking-widest">
                   {activeDocument && useContext ? `Context: ${activeDocument.public_id.split('/').pop()}` : 'General Intelligence'}
                 </span>
             </div>
@@ -130,7 +132,7 @@ function Chatbot() {
             className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest transition-all border ${
               useContext 
                 ? 'bg-rose-500/10 border-rose-500/30 text-rose-500 hover:bg-rose-500/20' 
-                : 'bg-slate-800 border-slate-700 text-slate-500 hover:bg-slate-700'
+                : 'bg-surface border-border text-text-muted hover:bg-primary/10'
             }`}
           >
             {useContext ? 'Context ON' : 'Context OFF'}
@@ -145,7 +147,7 @@ function Chatbot() {
         {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-center px-4 opacity-50 select-none">
                 <span className="material-symbols-outlined text-4xl mb-3 text-primary">forum</span>
-                <p className="text-[10px] uppercase font-black tracking-widest text-slate-400 leading-relaxed">Start a discussion with<br/>LexNet AI</p>
+                <p className="text-[10px] uppercase font-black tracking-widest text-text-muted leading-relaxed">Start a discussion with<br/>LexNet AI</p>
             </div>
         )}
         
@@ -163,24 +165,40 @@ function Chatbot() {
                 <div className={`max-w-[85%] p-3.5 text-xs font-medium leading-relaxed relative ${
                     isUser 
                       ? 'bg-primary text-slate-900 rounded-2xl rounded-tr-sm shadow-lg shadow-primary/20'
-                      : 'bg-[#161726]/80 backdrop-blur-md border border-slate-800 text-slate-200 rounded-2xl rounded-tl-sm shadow-xl'
+                      : 'bg-surface/80 backdrop-blur-md border border-border text-text-base rounded-2xl rounded-tl-sm shadow-xl'
                 }`}>
                   <div className={`prose prose-invert prose-xs max-w-none ${!isUser ? 'markdown-bot-msg' : ''}`}>
                     {isUser ? (
                       <p className="whitespace-pre-wrap">{msg.text}</p>
                     ) : (
-                      <ReactMarkdown 
-                        components={{
-                          p: ({children}) => <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>,
-                          ul: ({children}) => <ul className="list-disc ml-4 mb-3 space-y-1">{children}</ul>,
-                          ol: ({children}) => <ol className="list-decimal ml-4 mb-3 space-y-1">{children}</ol>,
-                          li: ({children}) => <li className="pl-1">{children}</li>,
-                          strong: ({children}) => <strong className="text-primary font-black">{children}</strong>,
-                          code: ({children}) => <code className="bg-black/30 px-1.5 py-0.5 rounded text-primary font-mono text-[10px]">{children}</code>
-                        }}
-                      >
-                        {msg.text}
-                      </ReactMarkdown>
+                      <div className="space-y-4">
+                        {/* Render Thought Process if present */}
+                        {msg.text.includes('<thought>') && (
+                          <div className="bg-background/50 border-l-2 border-primary/30 p-3 rounded-r-xl mb-4">
+                            <div className="flex items-center gap-2 mb-2 opacity-50">
+                                <span className="material-symbols-outlined text-[14px]">psychology</span>
+                                <span className="text-[9px] font-black uppercase tracking-widest">Neural Reasoning</span>
+                            </div>
+                            <div className="text-[11px] text-text-muted italic leading-relaxed opacity-80">
+                                {msg.text.match(/<thought>([\s\S]*?)(?:<\/thought>|$)/)?.[1] || ""}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Render Final Answer */}
+                        <ReactMarkdown 
+                          components={{
+                            p: ({children}) => <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>,
+                            ul: ({children}) => <ul className="list-disc ml-4 mb-3 space-y-1">{children}</ul>,
+                            ol: ({children}) => <ol className="list-decimal ml-4 mb-3 space-y-1">{children}</ol>,
+                            li: ({children}) => <li className="pl-1">{children}</li>,
+                            strong: ({children}) => <strong className="text-primary font-black">{children}</strong>,
+                            code: ({children}) => <code className="bg-black/30 px-1.5 py-0.5 rounded text-primary font-mono text-[10px]">{children}</code>
+                          }}
+                        >
+                          {msg.text.replace(/<thought>[\s\S]*?<\/thought>/g, '').trim()}
+                        </ReactMarkdown>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -189,23 +207,23 @@ function Chatbot() {
           );
         })}
         {isThinking && (
-           <div className="flex items-center gap-2 px-4 py-3 bg-[#161726]/80 backdrop-blur-md border border-slate-800 rounded-2xl rounded-tl-sm w-fit animate-in fade-in slide-in-from-bottom-2">
+           <div className="flex items-center gap-2 px-4 py-3 bg-surface/80 backdrop-blur-md border border-border rounded-2xl rounded-tl-sm w-fit animate-in fade-in slide-in-from-bottom-2">
               <span className="material-symbols-outlined text-sm text-primary animate-spin">sync</span>
-              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 animate-pulse">Scanning DB...</span>
+              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-text-muted animate-pulse">Scanning DB...</span>
            </div>
         )}
         <div ref={chatEndRef} />
       </div>
 
       {/* Input */}
-      <div className="p-4 border-t border-slate-800 bg-[#0d0d18]/80 backdrop-blur-xl">
+      <div className="p-4 border-t border-border bg-background/80 backdrop-blur-xl">
         <div className="relative">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyPress}
-            className="w-full bg-[#161726] border border-slate-800 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-xs text-white rounded-xl py-3 pl-4 pr-12 placeholder-slate-600 transition-all outline-none"
+            className="w-full bg-surface border border-border focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-xs text-text-base rounded-xl py-3 pl-4 pr-12 placeholder-text-muted/50 transition-all outline-none"
             placeholder="Query the LexNet database..."
           />
           <button

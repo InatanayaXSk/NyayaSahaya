@@ -1,4 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import { API_BASE } from '../utils/api';
+
 import { useAuth } from './AuthContext';
 
 const ClientContext = createContext();
@@ -16,7 +18,8 @@ export const ClientProvider = ({ children }) => {
         // Only fetch clients if the user is a lawyer
         if (user && user.role === 'lawyer' && token) {
             setLoading(true);
-            fetch('http://localhost:8000/api/users/clients', {
+            fetch(`${API_BASE}/users/clients`, {
+
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }

@@ -53,12 +53,28 @@ class AIAnalyzer:
         if json_format:
             payload["response_format"] = {"type": "json_object"}
             
+        debug_path = "ai_debug.log"
+        with open(debug_path, "a", encoding="utf-8") as f:
+            f.write(f"\n\n--- SYNC CALL START: {self.generation_model} ---\n")
+            f.write(f"PROMPT: {prompt[:500]}...\n")
+            f.flush()
+
         try:
             resp = await self.client.post(url, json=payload)
             resp.raise_for_status()
             data = resp.json()
-            return data["choices"][0]["message"]["content"]
+            content = data["choices"][0]["message"]["content"]
+            
+            with open(debug_path, "a", encoding="utf-8") as f:
+                f.write(f"RESPONSE: {content[:500]}...\n")
+                f.write("--- SYNC CALL DONE ---\n")
+                f.flush()
+                
+            return content
         except Exception as e:
+            with open(debug_path, "a", encoding="utf-8") as f:
+                f.write(f"SYNC CALL ERROR: {str(e)}\n")
+                f.flush()
             print(f"[LexNet] API Error: {e}")
             return f"ERROR_AI: {str(e)}"
             
@@ -68,24 +84,60 @@ class AIAnalyzer:
             "messages": [{"role": "user", "content": prompt}],
             "stream": True
         }
+        
+        # DEBUG: Log initiation
+        debug_path = "ai_debug.log"
+        with open(debug_path, "a", encoding="utf-8") as f:
+            f.write(f"\n\n--- STREAM START: {self.generation_model} ---\n")
+            f.write(f"PROMPT: {prompt[:500]}...\n")
+            f.flush()
+
+        in_thought = False # Local state for this generator call
+
         try:
             async with self.client.stream("POST", url, json=payload) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
                     if line:
+                        with open(debug_path, "a", encoding="utf-8") as f:
+                            f.write(f"RAW: {line}\n")
+                            f.flush()
+                            
                         if line.startswith("data: "):
                             data_str = line[6:]
                             if data_str.strip() == "[DONE]":
+                                with open(debug_path, "a", encoding="utf-8") as f:
+                                    f.write("--- STREAM DONE ---\n")
+                                    f.flush()
                                 break
                             try:
                                 data = json.loads(data_str)
                                 if "choices" in data and len(data["choices"]) > 0:
                                     delta = data["choices"][0].get("delta", {})
-                                    if delta.get("content"):
-                                        yield delta["content"]
+                                    
+                                    # Handle Reasoning Tokens (Thinking)
+                                    reasoning = delta.get("reasoning_content")
+                                    if reasoning:
+                                        if not in_thought:
+                                            in_thought = True
+                                            yield "<thought>\n"
+                                        yield reasoning
+                                        continue
+                                    
+                                    # Handle Content Tokens (Answer)
+                                    content = delta.get("content")
+                                    if content:
+                                        # If we were in thought, close it
+                                        if in_thought:
+                                            in_thought = False
+                                            yield "\n</thought>\n\n"
+                                        yield content
                             except json.JSONDecodeError:
                                 continue
         except Exception as e:
+            with open(debug_path, "a", encoding="utf-8") as f:
+                f.write(f"STREAM ERROR: {str(e)}\n")
+                f.flush()
             yield f"\nERROR: {str(e)}"
 
     def _init_embedder(self):

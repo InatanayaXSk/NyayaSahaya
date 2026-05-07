@@ -47,26 +47,37 @@ def chunk_text(text, max_len=2000):
     return chunks
 
 def ingest():
-    data_path = os.path.join("data", "data.txt")
-    if not os.path.exists(data_path):
-        print(f"File {data_path} not found.")
+    data_dir = "data"
+    if not os.path.exists(data_dir):
+        print(f"Directory {data_dir} not found.")
         return
 
-    with open(data_path, "r", encoding="utf-8") as f:
-        content = f.read()
+    all_chunks = []
+    
+    # Iterate over all .txt files in the data directory
+    files = [f for f in os.listdir(data_dir) if f.endswith(".txt")]
+    print(f"Found {len(files)} text files: {files}")
+    
+    for filename in files:
+        data_path = os.path.join(data_dir, filename)
+        print(f"Processing {filename}...")
+        try:
+            with open(data_path, "r", encoding="utf-8") as f:
+                content = f.read()
 
-    # Simple chunking by paragraph (double newline)
-    initial_chunks = [c.strip() for c in content.split('\n\n') if len(c.strip()) > 10]
-    
-    chunks = []
-    for ic in initial_chunks:
-        chunks.extend(chunk_text(ic, max_len=2000))
-    
-    if not chunks:
+            # Simple chunking by paragraph (double newline)
+            initial_chunks = [c.strip() for c in content.split('\n\n') if len(c.strip()) > 10]
+            
+            for ic in initial_chunks:
+                all_chunks.extend(chunk_text(ic, max_len=2000))
+        except Exception as e:
+            print(f"Error reading {filename}: {e}")
+
+    if not all_chunks:
         print("No content found to embed.")
         return
 
-    vectors = embed_texts(chunks)
+    vectors = embed_texts(all_chunks)
     
     dimension = vectors.shape[1]
     index = faiss.IndexFlatL2(dimension)
@@ -76,9 +87,9 @@ def ingest():
     faiss.write_index(index, "faiss_index/legal_index.faiss")
     
     with open("faiss_index/chunks.json", "w", encoding="utf-8") as f:
-        json.dump(chunks, f, ensure_ascii=False, indent=2)
+        json.dump(all_chunks, f, ensure_ascii=False, indent=2)
         
-    print(f"Successfully ingested {len(chunks)} sub-chunks into FAISS index with dimension {dimension}.")
+    print(f"Successfully ingested {len(all_chunks)} sub-chunks into FAISS index with dimension {dimension}.")
 
 if __name__ == "__main__":
     ingest()

@@ -24,6 +24,7 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    full_name: Mapped[Optional[str]] = mapped_column(String(255))
     hashed_password: Mapped[str] = mapped_column(String(255))
     role: Mapped[Role] = mapped_column(SQLEnum(Role), default=Role.CLIENT)
     
@@ -57,6 +58,10 @@ class DocumentLedger(Base):
     signer_id: Mapped[Optional[str]] = mapped_column(String(100))
     extracted_text: Mapped[Optional[str]] = mapped_column(Text())
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    # Ethereum Sepolia on-chain verification
+    eth_tx_hash: Mapped[Optional[str]] = mapped_column(String(66))    # 0x + 64 hex chars
+    eth_chain_id: Mapped[Optional[int]] = mapped_column(default=None)  # 11155111 for Sepolia
 
     # Relationships
     owner: Mapped["User"] = relationship(back_populates="owned_documents")

@@ -8,7 +8,12 @@ export default {
   theme: {
     extend: {
       colors: {
-        "primary": "#bbbdf6",
+        "primary": "rgb(var(--color-primary) / <alpha-value>)",
+        "background": "rgb(var(--color-background) / <alpha-value>)",
+        "surface": "rgb(var(--color-surface) / <alpha-value>)",
+        "border": "rgb(var(--color-border) / <alpha-value>)",
+        "text-base": "rgb(var(--color-text-base) / <alpha-value>)",
+        "text-muted": "rgb(var(--color-text-muted) / <alpha-value>)",
         "lavender-grey": "#d0d1e6",
         "background-light": "#f6f6f8",
         "background-dark": "#111221",
@@ -17,13 +22,11 @@ export default {
         "risk-high": "#ef4444",
         "risk-med": "#f59e0b",
         "risk-safe": "#10b981",
-        // Dashboard variant colors
-        "dash-primary": "#797A9E",
-        "dash-secondary": "#9893DA",
-        "dash-accent": "#BBBDF6",
-        "dash-neutral-dark": "#625F63",
-        "dash-neutral-dim": "#72727E",
       },
+      borderColor: theme => ({
+        ...theme('colors'),
+        DEFAULT: "rgb(var(--color-border) / 0.2)",
+      }),
       fontFamily: {
         "display": ["Inter", "sans-serif"],
         "body": ["'IBM Plex Sans'", "sans-serif"],

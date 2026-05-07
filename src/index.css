@@ -6,7 +6,35 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --color-background: 246 246 248;
+    --color-surface: 255 255 255;
+    /* CHANGE THIS FOR DAY MODE BORDERS (Subtle Grey) */
+    --color-border: 226 232 240;
+    /* slate-200 - subtle for light mode */
+    --color-text-base: 15 23 42;
+    --color-text-muted: 100 116 139;
+    --color-primary: 187 189 246;
+  }
+
+  .dark {
+    --color-background: 8 9 15;
+    /* #08090f - pure stealth black */
+    --color-surface: 12 13 22;
+    /* #0c0d16 */
+    /* CHANGE THIS FOR DARK MODE BORDERS (Deep Charcoal, very low contrast) */
+    --color-border: 20 21 33;
+    /* #141521 - extremely subtle against black */
+    --color-text-base: 226 232 240;
+    /* slate-200 */
+    --color-text-muted: 71 85 105;
+    /* slate-600 */
+    --color-primary: 187 189 246;
+    color-scheme: dark;
+  }
+
   body {
+    @apply bg-[rgb(var(--color-background))] text-[rgb(var(--color-text-base))] transition-colors duration-300;
     font-family: 'Inter', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -14,27 +42,25 @@
 }
 
 @layer components {
+
   /* Glassmorphism Navigation */
   .glass-nav {
-    background: rgba(246, 246, 248, 0.7);
+    background-color: rgb(var(--color-surface) / 0.7);
     backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-bottom: 1px solid rgba(187, 189, 246, 0.2);
+    border-bottom: 1px solid rgb(var(--color-border) / 0.5);
   }
 
   .glass-nav-dark {
-    background: rgba(22, 23, 38, 0.7);
+    background-color: rgb(var(--color-surface) / 0.7);
     backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-bottom: 1px solid rgba(187, 189, 246, 0.1);
+    border-bottom: 1px solid rgb(var(--color-border) / 0.1);
   }
 
   /* Glass Card */
   .glass {
-    background: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background-color: rgb(var(--color-surface) / 0.7);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgb(var(--color-border) / 0.2);
   }
 
   /* OLED Display effect */
@@ -46,8 +72,8 @@
   /* Scan line animation */
   .scan-line {
     height: 2px;
-    background: linear-gradient(90deg, transparent, #bbbdf6, transparent);
-    box-shadow: 0 0 15px #bbbdf6;
+    background: linear-gradient(90deg, transparent, #7378fd, transparent);
+    box-shadow: 0 0 15px #7378fd;
   }
 
   /* Crypto grid pattern */
@@ -60,12 +86,14 @@
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
   }
+
   .custom-scrollbar::-webkit-scrollbar-track {
     background: transparent;
   }
+
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #bbbdf6;
-    border-radius: 10px;
+    background-color: rgb(var(--color-primary) / 0.4);
+    @apply rounded-full;
   }
 
   /* Status pulse */
@@ -75,197 +103,37 @@
 }
 
 @keyframes pulse-glow {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
 }
 
 /* Print styles for verification report */
 @media print {
-  .no-print { display: none; }
-  body { background: white; }
-  .print-container { width: 100%; max-width: 100%; padding: 0; margin: 0; border: none; }
-  .page-break { page-break-before: always; }
-}
+  .no-print {
+    display: none;
+  }
 
-/* Global dark mode overrides for pages that don't have explicit dark: classes */
-.dark {
-  color-scheme: dark;
-}
+  body {
+    background: white !important;
+    color: black !important;
+  }
 
-.dark .bg-white {
-  --tw-bg-opacity: 1;
-  background-color: rgb(22 23 38 / var(--tw-bg-opacity));
-}
+  .print-container {
+    width: 100%;
+    max-width: 100%;
+    padding: 0;
+    margin: 0;
+    border: none;
+  }
 
-.dark .bg-white\/50 {
-  background-color: rgb(22 23 38 / 0.5);
-}
-
-.dark .bg-slate-50 {
-  background-color: rgb(17 18 33);
-}
-
-.dark .border-slate-200 {
-  border-color: rgb(45 46 69);
-}
-
-.dark .border-slate-100 {
-  border-color: rgb(45 46 69);
-}
-
-.dark .text-slate-900 {
-  color: rgb(241 245 249);
-}
-
-.dark .text-slate-800 {
-  color: rgb(226 232 240);
-}
-
-.dark .text-slate-700 {
-  color: rgb(203 213 225);
-}
-
-.dark .text-slate-600 {
-  color: rgb(148 163 184);
-}
-
-.dark .text-slate-500 {
-  color: rgb(148 163 184);
-}
-
-.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
-  border-color: rgb(45 46 69);
-}
-
-.dark .border-primary\/10 {
-  border-color: rgb(187 189 246 / 0.1);
-}
-
-.dark .hover\:bg-slate-50:hover {
-  background-color: rgb(17 18 33);
-}
-
-.dark .bg-slate-100 {
-  background-color: rgb(22 23 38);
-}
-
-.dark .bg-background-light {
-  background-color: rgb(17 18 33);
-}
-
-.dark .bg-primary\/5 {
-  background-color: rgb(187 189 246 / 0.05);
-}
-
-.dark .bg-primary\/10 {
-  background-color: rgb(187 189 246 / 0.1);
-}
-
-.dark .glass {
-  background: rgba(22, 23, 38, 0.7);
-  border-color: rgba(187, 189, 246, 0.1);
-}
-
-.dark .crypto-grid {
-  background-image: radial-gradient(circle at 2px 2px, rgba(187, 189, 246, 0.08) 1px, transparent 0);
-}
-
-.dark .bg-emerald-50 {
-  background-color: rgb(6 78 59 / 0.2);
-}
-
-.dark .bg-emerald-500\/10 {
-  background-color: rgb(16 185 129 / 0.1);
-}
-
-.dark .bg-amber-50 {
-  background-color: rgb(120 53 15 / 0.2);
-}
-
-.dark .bg-green-100 {
-  background-color: rgb(6 78 59 / 0.2);
-}
-
-.dark .bg-green-100\/10 {
-  background-color: rgb(6 78 59 / 0.1);
-}
-
-.dark .border-emerald-100 {
-  border-color: rgb(6 78 59 / 0.3);
-}
-
-.dark .border-emerald-500\/20 {
-  border-color: rgb(16 185 129 / 0.2);
-}
-
-.dark .border-emerald-500\/30 {
-  border-color: rgb(16 185 129 / 0.3);
-}
-
-.dark .border-green-200 {
-  border-color: rgb(6 78 59 / 0.3);
-}
-
-.dark .text-emerald-800 {
-  color: rgb(167 243 208);
-}
-
-.dark .text-emerald-600 {
-  color: rgb(52 211 153);
-}
-
-.dark .text-emerald-600\/80 {
-  color: rgb(52 211 153 / 0.8);
-}
-
-.dark .text-amber-700 {
-  color: rgb(252 211 77);
-}
-
-.dark .text-green-700 {
-  color: rgb(74 222 128);
-}
-
-.dark .text-red-600 {
-  color: rgb(248 113 113);
-}
-
-.dark .bg-red-500\/10 {
-  background-color: rgb(239 68 68 / 0.1);
-}
-
-.dark .border-red-500\/30 {
-  border-color: rgb(239 68 68 / 0.3);
-}
-
-.dark code {
-  color: rgb(187 189 246);
-}
-
-.dark .divide-primary\/5 > :not([hidden]) ~ :not([hidden]) {
-  border-color: rgb(187 189 246 / 0.05);
-}
-
-.dark .bg-slate-200 {
-  background-color: rgb(45 46 69);
-}
-
-.dark .bg-slate-200\/50 {
-  background-color: rgb(45 46 69 / 0.5);
-}
-
-.dark .ring-amber-600\/20 {
-  --tw-ring-color: rgb(217 119 6 / 0.2);
-}
-
-.dark .ring-emerald-600\/20 {
-  --tw-ring-color: rgb(5 150 105 / 0.2);
-}
-
-.dark .prose {
-  color: rgb(203 213 225);
-}
-
-.dark mark {
-  color: rgb(241 245 249);
+  .page-break {
+    page-break-before: always;
+  }
 }

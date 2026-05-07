@@ -33,21 +33,21 @@ export default function AuthPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center pt-24 pb-12 px-6">
-            <div className="w-full max-w-md p-8 glass dark:glass-dark rounded-3xl shadow-2xl border border-slate-200/50 dark:border-border-dark relative overflow-hidden">
+        <div className="min-h-screen flex items-center justify-center pt-24 pb-12 px-6 bg-background text-text-base">
+            <div className="w-full max-w-md p-8 bg-surface border border-border rounded-3xl shadow-2xl relative overflow-hidden">
                 {/* Accent blobs */}
                 <div className="absolute top-[-50px] right-[-50px] w-32 h-32 bg-primary/20 blur-[50px] rounded-full pointer-events-none"></div>
                 <div className="absolute bottom-[-50px] left-[-50px] w-32 h-32 bg-emerald-500/10 blur-[50px] rounded-full pointer-events-none"></div>
 
-                <div className="text-center mb-8 relative z-10">
-                    <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-primary/20">
-                        <span className="material-symbols-outlined text-primary text-3xl">lock_person</span>
+                <div className="text-center mb-10 relative z-10">
+                    <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-primary/20 shadow-[0_0_20px_rgba(var(--color-primary),0.1)]">
+                        <span className="material-symbols-outlined text-primary text-4xl">security</span>
                     </div>
-                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-                        {isLogin ? 'Access LexNet' : 'Join LexNet'}
+                    <h1 className="text-3xl font-black uppercase tracking-tight">
+                        {isLogin ? 'Access' : 'Join'} <span className="text-primary">LexNet</span>
                     </h1>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
-                        {isLogin ? 'Sign in to access your secure portal' : 'Create an identity on the legal network'}
+                    <p className="text-[10px] text-text-muted font-bold uppercase tracking-[0.2em] mt-3">
+                        {isLogin ? 'Secure Handshake Protocol v4.2' : 'Initialize Legal Identity Sequence'}
                     </p>
                 </div>
 
@@ -60,7 +60,7 @@ export default function AuthPage() {
 
                 <form onSubmit={handleSubmit} className="space-y-5 relative z-10">
                     <div>
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+                        <label className="block text-xs font-bold text-text-base uppercase tracking-wider mb-2">
                             Username
                         </label>
                         <input
@@ -68,13 +68,13 @@ export default function AuthPage() {
                             required
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
-                            className="w-full px-4 py-3 bg-white/50 dark:bg-black/20 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all dark:text-white"
+                            className="w-full px-4 py-3 bg-background/50 border border-border rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
                             placeholder="e.g. harveyspecter"
                         />
                     </div>
                     
                     <div>
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+                        <label className="block text-xs font-bold text-text-base uppercase tracking-wider mb-2">
                             Password
                         </label>
                         <input
@@ -82,13 +82,13 @@ export default function AuthPage() {
                             required
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full px-4 py-3 bg-white/50 dark:bg-black/20 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all dark:text-white"
+                            className="w-full px-4 py-3 bg-background/50 border border-border rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
                             placeholder="••••••••"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+                        <label className="block text-xs font-bold text-text-base uppercase tracking-wider mb-2">
                             {isLogin ? 'Signing in as' : 'Account Type'}
                         </label>
                         <div className="grid grid-cols-2 gap-3">
@@ -97,11 +97,11 @@ export default function AuthPage() {
                                 onClick={() => setRole('client')}
                                 className={`py-3 px-4 rounded-xl border flex items-center justify-center gap-2 transition-all ${
                                     role === 'client' 
-                                        ? 'bg-primary/20 border-primary text-primary font-bold shadow-[0_0_15px_rgba(37,99,235,0.2)]' 
-                                        : 'bg-white/50 dark:bg-black/10 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold hover:border-primary/50'
+                                        ? 'bg-primary/20 border-primary text-primary font-bold shadow-[0_0_15px_rgba(var(--color-primary),0.2)]' 
+                                        : 'bg-surface border-border text-text-muted'
                                 }`}
                             >
-                                <span className="material-symbols-outlined text-[18px]">person</span>
+                                <span className="material-symbols-outlined text-lg">person</span>
                                 Client
                             </button>
                             <button
@@ -109,11 +109,11 @@ export default function AuthPage() {
                                 onClick={() => setRole('lawyer')}
                                 className={`py-3 px-4 rounded-xl border flex items-center justify-center gap-2 transition-all ${
                                     role === 'lawyer' 
-                                        ? 'bg-purple-500/20 border-purple-500 text-purple-600 dark:text-purple-400 font-bold shadow-[0_0_15px_rgba(168,85,247,0.2)]' 
-                                        : 'bg-white/50 dark:bg-black/10 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold hover:border-purple-500/50'
+                                        ? 'bg-primary/20 border-primary text-primary font-bold shadow-[0_0_15px_rgba(var(--color-primary),0.2)]' 
+                                        : 'bg-surface border-border text-text-muted'
                                 }`}
                             >
-                                <span className="material-symbols-outlined text-[18px]">gavel</span>
+                                <span className="material-symbols-outlined text-lg">gavel</span>
                                 Lawyer
                             </button>
                         </div>
@@ -122,32 +122,26 @@ export default function AuthPage() {
                     <button
                         type="submit"
                         disabled={isLoading}
-                        className="w-full py-3.5 mt-2 bg-primary hover:bg-primary-hover text-white font-bold rounded-xl shadow-lg shadow-primary/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                        className="w-full py-4 bg-primary text-slate-900 font-black text-[11px] uppercase tracking-[0.3em] rounded-xl shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed group hover:scale-[1.02] active:scale-[0.98]"
                     >
                         {isLoading ? (
-                            <span className="material-symbols-outlined animate-spin">refresh</span>
+                            <span className="material-symbols-outlined animate-spin">sync</span>
                         ) : (
                             <>
-                                {isLogin ? 'Enter Portal' : 'Create Identity'}
-                                <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                                <span>{isLogin ? 'Establish Handshake' : 'Initialize Protocol'}</span>
+                                <span className="material-symbols-outlined text-lg group-hover:translate-x-1 transition-transform">arrow_forward</span>
                             </>
                         )}
                     </button>
                 </form>
 
                 <div className="mt-8 text-center relative z-10">
-                    <p className="text-sm text-slate-600 dark:text-slate-400">
-                        {isLogin ? "Don't have an identity?" : "Already have an identity?"}
-                        <button
-                            onClick={() => {
-                                setIsLogin(!isLogin);
-                                setError('');
-                            }}
-                            className="ml-2 text-primary font-bold hover:underline"
-                        >
-                            {isLogin ? 'Create one' : 'Log in here'}
-                        </button>
-                    </p>
+                    <button
+                        onClick={() => setIsLogin(!isLogin)}
+                        className="text-xs font-black uppercase tracking-[0.2em] text-text-muted hover:text-primary transition-colors"
+                    >
+                        {isLogin ? 'Need an account? Initialize Register Sequence' : 'Existing operator? Establish Handshake'}
+                    </button>
                 </div>
             </div>
         </div>

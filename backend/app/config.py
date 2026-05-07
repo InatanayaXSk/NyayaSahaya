@@ -39,5 +39,16 @@ class Settings:
     STORAGE_DIR: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "storage")
     STATIC_FILES_URL: str = "/api/files"
 
+    # Ethereum Sepolia
+    ALCHEMY_API_KEY: str = os.getenv("ALCHEMY_API_KEY", "")
+    ENDPOINT_SEPOLIA: str = os.getenv("ENDPOINT_SEPOLIA", "https://eth-sepolia.g.alchemy.com/v2/")
+    ETH_PRIVATE_KEY: str = os.getenv("PRIVATE_KEY", "")
+    ETH_CONTRACT_ADDRESS: str = os.getenv("ETH_CONTRACT_ADDRESS", "")
+
+    @property
+    def SEPOLIA_RPC_URL(self) -> str:
+        """Build the full Sepolia RPC URL from Alchemy endpoint + API key."""
+        return f"{self.ENDPOINT_SEPOLIA}{self.ALCHEMY_API_KEY}"
+
 
 settings = Settings()

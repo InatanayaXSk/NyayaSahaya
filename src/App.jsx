@@ -5,12 +5,10 @@ import DashboardPage from './pages/DashboardPage';
 import DocumentGeneratorPage from './pages/DocumentGeneratorPage';
 import RiskAnalysisPage from './pages/RiskAnalysisPage';
 import LegalSummaryPage from './pages/LegalSummaryPage';
-import HardwareAuthPage from './pages/HardwareAuthPage';
-import CryptoSigningPage from './pages/CryptoSigningPage';
-import NetworkRegistryPage from './pages/NetworkRegistryPage';
-import VerificationReportPage from './pages/VerificationReportPage';
+import DocumentViewPage from './pages/DocumentViewPage';
 import BridgeMonitorPage from './pages/BridgeMonitorPage';
 import AuthPage from './pages/AuthPage';
+import VerifyPage from './pages/VerifyPage';
 import { AuthProvider } from './context/AuthContext';
 import { ClientProvider } from './context/ClientContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
@@ -30,11 +28,9 @@ function App() {
               <Route path="/document-generator" element={<ProtectedRoute><DocumentGeneratorPage /></ProtectedRoute>} />
               <Route path="/risk-analysis" element={<ProtectedRoute><RiskAnalysisPage /></ProtectedRoute>} />
               <Route path="/legal-summary" element={<ProtectedRoute><LegalSummaryPage /></ProtectedRoute>} />
-              <Route path="/hardware-auth" element={<ProtectedRoute><HardwareAuthPage /></ProtectedRoute>} />
-              <Route path="/crypto-signing" element={<ProtectedRoute><CryptoSigningPage /></ProtectedRoute>} />
-              <Route path="/network-registry" element={<NetworkRegistryPage />} />
-              <Route path="/verification-report" element={<VerificationReportPage />} />
+              <Route path="/documents/:id" element={<ProtectedRoute><DocumentViewPage /></ProtectedRoute>} />
               <Route path="/bridge-monitor" element={<ProtectedRoute><BridgeMonitorPage /></ProtectedRoute>} />
+              <Route path="/verify" element={<ProtectedRoute><VerifyPage /></ProtectedRoute>} />
             </Routes>
           </Layout>
         </Router>

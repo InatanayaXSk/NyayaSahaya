@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
-const API_BASE = "http://localhost:8000";
+import { BASE_URL as API_BASE } from '../utils/api';
+
 
 const suggestedQuestions = ['Analyze rent increase clauses', 'Summarize termination terms', 'Liability limits explanation'];
 
@@ -119,273 +120,214 @@ export default function LegalSummaryPage() {
     };
 
     return (
-        <div className="flex flex-col lg:flex-row h-[calc(100vh-80px)] bg-[#0f0f1a] text-slate-200 overflow-hidden">
-            {/* Sidebar: The "Document Vault" */}
-            <aside className="w-full lg:w-80 border-r border-slate-800 bg-[#0a0a14] flex flex-col shrink-0">
-                <div className="p-6 border-b border-slate-800 flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center border border-primary/30">
-                        <span className="material-symbols-outlined text-primary text-xl">account_balance_wallet</span>
-                    </div>
-                    <h2 className="font-black text-xs uppercase tracking-[0.2em] text-slate-400">Document Vault</h2>
+        <div className="bg-background text-text-base min-h-[calc(100vh-56px)] flex">
+            {/* Left Sidebar: Document Vault */}
+            <div className="w-80 border-r border-border bg-surface/50 backdrop-blur-xl flex flex-col shrink-0">
+                <div className="p-6 border-b border-border flex items-center justify-between">
+                    <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Document Vault</h2>
+                    <span className="material-symbols-outlined text-primary text-sm">inventory_2</span>
                 </div>
-                
-                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-2">
+                <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
                     {documents.map((doc, i) => (
-                        <button
+                        <button 
                             key={i}
                             onClick={() => handleSelectDoc(doc)}
-                            className={`w-full text-left p-4 rounded-xl border transition-all group relative overflow-hidden ${
-                                selectedDoc?.public_id === doc.public_id
-                                    ? 'bg-primary/10 border-primary/50 text-white shadow-[0_0_20px_rgba(187,189,246,0.1)]'
-                                    : 'bg-transparent border-slate-800 text-slate-500 hover:border-slate-600 hover:bg-slate-800/30'
+                            className={`w-full text-left p-4 rounded-2xl border transition-all group ${
+                                selectedDoc?.public_id === doc.public_id 
+                                    ? 'bg-primary border-primary shadow-lg shadow-primary/20' 
+                                    : 'bg-surface border-border hover:border-primary/50'
                             }`}
                         >
-                            <div className="flex flex-col gap-1 relative z-10">
-                                <span className={`text-[9px] font-black uppercase tracking-widest ${selectedDoc?.public_id === doc.public_id ? 'text-primary' : 'text-slate-600'}`}>Cloud Asset</span>
-                                <span className="text-xs font-bold truncate">{doc.public_id.split('/').pop()}</span>
-                            </div>
-                            {selectedDoc?.public_id === doc.public_id && (
-                                <div className="absolute right-0 top-0 h-full w-1 bg-primary"></div>
-                            )}
-                        </button>
-                    ))}
-                    {documents.length === 0 && (
-                        <div className="text-center py-12 px-6">
-                            <span className="material-symbols-outlined text-slate-700 text-4xl mb-4">folder_off</span>
-                            <p className="text-[10px] uppercase font-black text-slate-600 tracking-widest leading-relaxed">No vaulted assets found.</p>
-                        </div>
-                    )}
-                </div>
-
-                <div className="p-4 border-t border-slate-800 bg-[#0d0d18]">
-                    <button className="w-full py-3 rounded-xl border border-dashed border-slate-700 text-slate-500 text-[10px] font-black uppercase tracking-widest hover:border-primary/50 hover:text-primary transition-all flex items-center justify-center gap-2">
-                        <span className="material-symbols-outlined text-sm">cloud_upload</span> Upload New Doc
-                    </button>
-                </div>
-            </aside>
-
-            {/* Main Content: Summary Hub */}
-            <main className="flex-1 flex flex-col overflow-y-auto bg-slate-900/40 relative">
-                {/* Visual Glass Header */}
-                <div className="sticky top-0 z-20 px-8 py-5 border-b border-slate-800/50 glass-nav-dark flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <span className={`px-3 py-1 border text-[9px] font-black uppercase tracking-widest rounded-full transition-colors ${error ? 'bg-rose-500/10 border-rose-500/20 text-rose-500' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'}`}>
-                            {error ? 'Neural Engine Throttled' : 'Neural Engine Active'}
-                        </span>
-                        <h1 className="text-lg font-black text-white tracking-tight">
-                            {selectedDoc ? selectedDoc.public_id.split('/').pop() : 'Direct Summary Hub'}
-                        </h1>
-                    </div>
-                    {selectedDoc && !loading && !error && (
-                        <a 
-                            href={selectedDoc.secure_url || selectedDoc.url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            download
-                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800/50 border border-slate-700 text-xs font-black text-primary uppercase tracking-widest hover:bg-primary/10 hover:border-primary/40 transition-all shadow-xl"
-                        >
-                            <span className="material-symbols-outlined text-sm">cloud_download</span>
-                            Download PDF
-                        </a>
-                    )}
-                </div>
-
-                <div className="p-8 max-w-5xl mx-auto w-full">
-                    {loading ? (
-                        <div className="min-h-[60vh] flex flex-col items-center justify-center">
-                            <div className="relative w-24 h-24 mb-6">
-                                <div className="absolute inset-0 border-4 border-primary/20 rounded-full"></div>
-                                <div className="absolute inset-0 border-4 border-t-primary rounded-full animate-spin"></div>
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <span className="material-symbols-outlined text-primary text-3xl animate-pulse">brain</span>
-                                </div>
-                            </div>
-                            <h3 className="text-xl font-black text-white tracking-tighter uppercase italic">Synthesizing...</h3>
-                            <p className="text-slate-500 text-[11px] mt-2 font-bold uppercase tracking-[0.3em]">Neural Pipeline engaged</p>
-                        </div>
-                    ) : error ? (
-                        <div className="min-h-[60vh] flex flex-col items-center justify-center text-center space-y-6">
-                            <div className="w-24 h-24 rounded-full border-4 border-rose-500/10 flex items-center justify-center">
-                                <span className="material-symbols-outlined text-rose-500 text-6xl">
-                                    {error.includes("THROTTLED") ? "timer_3" : error.includes("AUTH") || error.includes("CONFIG") ? "key_off" : "cloud_off"}
-                                </span>
-                            </div>
-                            <div className="space-y-3">
-                                <h2 className="text-3xl font-black text-white tracking-tighter uppercase italic">
-                                    {error.includes("THROTTLED") ? "Engine Cooling Down" : "Neural Sync Failed"}
-                                </h2>
-                                <p className="text-slate-400 max-w-sm font-black text-[10px] uppercase tracking-widest leading-relaxed mx-auto">
-                                    {error.includes("THROTTLED") ? "Neural Engine at capacity. Please wait 30 seconds for the quota to reset." : 
-                                     error.includes("AUTH") ? "Invalid API Configuration. Check backend .env settings." :
-                                     error.includes("DOWNLOAD") ? "Could not access the document from the cloud vault." :
-                                     `System Report: ${error}`}
-                                </p>
-                                <button 
-                                    onClick={() => handleSelectDoc(selectedDoc)}
-                                    className="mt-6 px-8 py-2.5 rounded-xl bg-primary text-slate-900 font-black text-[10px] uppercase tracking-[0.2em] shadow-lg hover:scale-105 transition-all"
-                                >
-                                    Retry Neural Sequence
-                                </button>
-                            </div>
-                        </div>
-                    ) : analysis ? (
-                        <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                            {/* Score & Key Terms */}
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                                <div className="col-span-1 md:col-span-1 p-6 rounded-2xl bg-slate-800/50 border border-slate-700 flex flex-col items-center justify-center">
-                                    <div className="relative w-20 h-20 flex items-center justify-center mb-2">
-                                        <svg className="w-full h-full -rotate-90">
-                                            <circle cx="40" cy="40" r="36" fill="transparent" stroke="currentColor" strokeWidth="4" className="text-slate-700" />
-                                            <circle cx="40" cy="40" r="36" fill="transparent" stroke="currentColor" strokeWidth="4" strokeDasharray={226} strokeDashoffset={226 - (226 * analysis.compliance_score / 100)} className="text-primary transition-all duration-1000" />
-                                        </svg>
-                                        <span className="absolute text-xl font-black text-white">{analysis.compliance_score}%</span>
-                                    </div>
-                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Compliance</p>
-                                </div>
-                                <div className="col-span-3 grid grid-cols-2 md:grid-cols-3 gap-4">
-                                    {(analysis.key_terms || []).slice(0, 3).map((term, i) => (
-                                        <div key={i} className="p-5 rounded-2xl bg-[#161726] border border-slate-800 group hover:border-primary/40 transition-all">
-                                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1 group-hover:text-primary">{term.label}</p>
-                                            <p className="text-lg font-black text-white truncate">{term.value}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Summary View */}
-                            <div className="bg-[#161726]/80 rounded-3xl border border-slate-800/80 p-8 shadow-2xl relative overflow-hidden group">
-                                <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 blur-[100px] pointer-events-none"></div>
-                                <div className="flex items-center gap-3 mb-8 border-b border-slate-800 pb-4">
-                                    <span className="material-symbols-outlined text-primary">auto_awesome</span>
-                                    <h3 className="text-sm font-black text-white uppercase tracking-[0.3em] font-display">LexAI Executive Briefing</h3>
-                                </div>
-                                <div className="prose prose-invert max-w-none">
-                                    <p className="text-slate-300 leading-relaxed font-medium text-base whitespace-pre-wrap selection:bg-primary selection:text-slate-900">
-                                        {analysis.summary}
+                            <div className="flex items-start gap-3">
+                                <span className={`material-symbols-outlined text-xl ${selectedDoc?.public_id === doc.public_id ? 'text-slate-900' : 'text-primary'}`}>description</span>
+                                <div className="min-w-0">
+                                    <p className={`text-xs font-black truncate uppercase tracking-wider ${selectedDoc?.public_id === doc.public_id ? 'text-slate-900' : 'text-text-base'}`}>
+                                        {doc.public_id.split('/').pop()}
+                                    </p>
+                                    <p className={`text-[9px] uppercase tracking-widest mt-0.5 ${selectedDoc?.public_id === doc.public_id ? 'text-slate-900/60' : 'text-text-muted'}`}>
+                                        ID: {doc.public_id.slice(0, 8)}...
                                     </p>
                                 </div>
                             </div>
+                        </button>
+                    ))}
+                </div>
+            </div>
 
-                            {/* Clause Breakdown */}
-                            <div className="space-y-4">
-                                <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-[0.4em] px-4">Critical Clause Map</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {(analysis.summary_items || []).map((item, i) => (
-                                        <div key={i} className="p-6 rounded-2xl bg-slate-800/40 border border-slate-800 hover:bg-slate-800/60 transition-all flex gap-4 items-start border-l-4 group" style={{ borderLeftColor: item.risk_level === 'high' ? '#ef4444' : item.risk_level === 'medium' ? '#f59e0b' : '#10b981' }}>
-                                            <span className={`material-symbols-outlined text-lg ${item.risk_level === 'high' ? 'text-rose-500' : item.risk_level === 'medium' ? 'text-amber-500' : 'text-emerald-500'}`}>
-                                                {item.risk_level === 'high' ? 'report' : item.risk_level === 'medium' ? 'info' : 'verified_user'}
-                                            </span>
-                                            <div>
-                                                <h4 className="text-xs font-black text-white uppercase tracking-widest mb-2 group-hover:text-primary transition-all">{item.title}</h4>
-                                                <p className="text-xs text-slate-400 leading-relaxed font-medium">{item.text}</p>
+            {/* Main Content: Analysis & Chat */}
+            <div className="flex-1 flex flex-col relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 blur-[120px] rounded-full pointer-events-none -mt-40 -mr-40"></div>
+                
+                {selectedDoc ? (
+                    <div className="flex-1 flex flex-col h-full overflow-hidden">
+                        {/* Header */}
+                        <div className="px-8 py-6 border-b border-border bg-surface/30 backdrop-blur-md flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-primary/10 rounded-xl border border-primary/20">
+                                    <span className="material-symbols-outlined text-primary">analytics</span>
+                                </div>
+                                <div>
+                                    <h1 className="text-xl font-black uppercase tracking-tight">{selectedDoc.public_id.split('/').pop()}</h1>
+                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Neural Sync Active • Context Optimized</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <button className="flex items-center gap-2 px-4 py-2 bg-surface border border-border rounded-xl text-[10px] font-black uppercase tracking-widest hover:border-primary/50 transition-all">
+                                    <span className="material-symbols-outlined text-sm">download</span> Export Report
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Analysis Grid */}
+                        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+                            <div className="max-w-5xl mx-auto space-y-8">
+                                {loading ? (
+                                    <div className="flex flex-col items-center justify-center py-20 animate-in fade-in duration-500">
+                                        <div className="relative mb-6">
+                                            <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full animate-pulse"></div>
+                                            <span className="material-symbols-outlined text-6xl text-primary animate-spin">sync</span>
+                                        </div>
+                                        <p className="text-[11px] font-black uppercase tracking-[0.3em] text-primary animate-pulse">Initializing Neural Summary...</p>
+                                    </div>
+                                ) : analysis ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        {/* Summary Card */}
+                                        <div className="bg-surface border border-border rounded-3xl p-8 relative group hover:border-primary/20 transition-all">
+                                            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-primary mb-6 flex items-center gap-2">
+                                                <span className="material-symbols-outlined text-sm">format_quote</span> Executive Summary
+                                            </h3>
+                                            <p className="text-sm text-text-base leading-relaxed mb-6 font-medium">
+                                                {analysis.summary || "Summary data processing error."}
+                                            </p>
+                                            <div className="h-px bg-border w-full mb-6"></div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="p-4 bg-background/50 rounded-2xl border border-border">
+                                                    <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Tone Analysis</p>
+                                                    <p className="text-xs font-bold text-text-base uppercase tracking-wider">Formal/Legal</p>
+                                                </div>
+                                                <div className="p-4 bg-background/50 rounded-2xl border border-border">
+                                                    <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Complexity</p>
+                                                    <p className="text-xs font-bold text-rose-500 uppercase tracking-wider">High (Level 8)</p>
+                                                </div>
                                             </div>
                                         </div>
-                                    ))}
+
+                                        {/* Critical Terms */}
+                                        <div className="bg-surface border border-border rounded-3xl p-8 relative group hover:border-primary/20 transition-all">
+                                            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-primary mb-6 flex items-center gap-2">
+                                                <span className="material-symbols-outlined text-sm">priority_high</span> Critical Clauses
+                                            </h3>
+                                            <div className="space-y-4">
+                                                {analysis.summary_items?.slice(0, 3).map((item, i) => (
+                                                    <div key={i} className="p-4 bg-background/50 border border-border rounded-2xl hover:bg-primary/5 transition-all">
+                                                        <div className="flex items-center justify-between mb-2">
+                                                            <p className="text-[10px] font-black uppercase tracking-widest text-text-base">{item.title}</p>
+                                                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter ${item.risk_level === 'high' ? 'bg-rose-500/20 text-rose-500' : 'bg-amber-500/20 text-amber-500'}`}>
+                                                                {item.risk_level} Risk
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-[11px] text-text-muted leading-relaxed">{item.text}</p>
+                                                    </div>
+                                                )) || <p className="text-xs text-text-muted italic">No critical terms identified.</p>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center py-20 opacity-40">
+                                        <span className="material-symbols-outlined text-5xl mb-4">document_scanner</span>
+                                        <p className="text-[10px] font-black uppercase tracking-[0.3em]">Awaiting Analysis Trigger</p>
+                                    </div>
+                                )}
+
+                                {/* Chat Interface inside main area */}
+                                <div className="bg-surface border border-border rounded-3xl flex flex-col h-[500px] shadow-2xl relative">
+                                    <div className="px-6 py-4 border-b border-border bg-surface/50 flex items-center justify-between rounded-t-3xl">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center border border-primary/30">
+                                                <span className="material-symbols-outlined text-primary text-lg">smart_toy</span>
+                                            </div>
+                                            <p className="text-[10px] font-black uppercase tracking-widest">Neural Interaction</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-background/30">
+                                        {messages.map((m, i) => (
+                                            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 duration-300`}>
+                                                <div className={`max-w-[80%] p-4 rounded-2xl ${
+                                                    m.role === 'user' 
+                                                        ? 'bg-primary text-slate-900 font-bold shadow-lg shadow-primary/10' 
+                                                        : 'bg-surface border border-border text-text-base'
+                                                }`}>
+                                                    <p className="text-xs leading-relaxed">{m.text}</p>
+                                                    <span className={`text-[8px] uppercase tracking-widest mt-2 block opacity-50 ${m.role === 'user' ? 'text-slate-900' : 'text-text-muted'}`}>
+                                                        {m.time}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {isChatting && (
+                                            <div className="flex justify-start">
+                                                <div className="bg-surface border border-border p-4 rounded-2xl">
+                                                    <span className="text-[9px] font-black text-primary uppercase tracking-[0.2em] animate-pulse">Neural Core Processing...</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Chat Controls */}
+                                    <div className="p-6 border-t border-border bg-surface/50 rounded-b-3xl">
+                                        <div className="flex flex-wrap gap-2 mb-4">
+                                            {suggestedQuestions.map((q, i) => (
+                                                <button
+                                                    key={i}
+                                                    onClick={() => setInput(q)}
+                                                    disabled={!selectedDoc || isChatting}
+                                                    className="px-3 py-1.5 rounded-lg bg-background/50 border border-border text-[9px] font-black text-text-muted uppercase tracking-widest hover:border-primary/50 hover:text-primary transition-all active:scale-95 disabled:opacity-30"
+                                                >
+                                                    {q}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <div className="relative">
+                                            <textarea
+                                                className="w-full bg-background border border-border rounded-2xl px-5 py-4 pr-12 text-xs font-medium text-text-base placeholder-text-muted focus:ring-1 focus:ring-primary/30 focus:border-primary/30 resize-none transition-all outline-none"
+                                                placeholder={selectedDoc ? "Query the document context..." : "Select a document to chat..."}
+                                                rows="2"
+                                                value={input}
+                                                onChange={e => setInput(e.target.value)}
+                                                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendMessage())}
+                                                disabled={!selectedDoc || isChatting}
+                                            ></textarea>
+                                            <button
+                                                onClick={handleSendMessage}
+                                                disabled={!selectedDoc || isChatting || !input.trim()}
+                                                className={`absolute right-3 bottom-3 p-2.5 rounded-xl transition-all ${
+                                                    !selectedDoc || isChatting || !input.trim() 
+                                                        ? 'text-text-muted opacity-30' 
+                                                        : 'text-primary hover:scale-110 active:scale-90'
+                                                }`}
+                                            >
+                                                <span className="material-symbols-outlined font-black">send_spark</span>
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    ) : (
-                        <div className="min-h-[60vh] flex flex-col items-center justify-center text-center px-12 space-y-8 animate-in fade-in duration-1000">
-                            <div className="w-32 h-32 rounded-full border-4 border-dashed border-slate-800 flex items-center justify-center relative">
-                                <span className="material-symbols-outlined text-slate-800 text-6xl">cloud_sync</span>
-                                <div className="absolute -right-2 -top-2 w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center">
-                                    <span className="material-symbols-outlined text-slate-500 text-sm">lock</span>
-                                </div>
-                            </div>
-                            <div className="space-y-3">
-                                <h2 className="text-4xl font-black text-white tracking-tighter italic uppercase">Vault Idle</h2>
-                                <p className="text-slate-500 max-w-md font-bold text-xs uppercase tracking-widest leading-relaxed">
-                                    Select an asset from the <span className="text-primary italic">Document Vault</span> on the left to initiate the neural scanning sequence.
-                                </p>
-                            </div>
-                            <div className="h-1 w-24 bg-gradient-to-r from-transparent via-slate-800 to-transparent"></div>
-                        </div>
-                    )}
-                </div>
-            </main>
-
-            {/* Right Panel: Interactive Neural Chat */}
-            <aside className="w-full lg:w-96 border-l border-slate-800 bg-[#0a0a14] flex flex-col shrink-0">
-                {/* Chat Header */}
-                <div className="p-6 border-b border-slate-800 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-[0_0_15px_rgba(187,189,246,0.3)]">
-                            <span className="material-symbols-outlined text-slate-900 font-black">psychology</span>
-                        </div>
-                        <div>
-                            <h3 className="font-black text-xs text-white uppercase tracking-widest">LexPro AI</h3>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                <span className="text-[9px] font-black text-slate-500 uppercase">Context Aware</span>
-                            </div>
-                        </div>
                     </div>
-                </div>
-
-                {/* Chat History */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar bg-slate-900/10">
-                    {messages.map((msg, idx) => (
-                        <div key={idx} className={`flex flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                            <div className={`max-w-[85%] p-4 text-xs font-medium leading-relaxed shadow-2xl relative ${
-                                msg.role === 'ai' 
-                                    ? 'bg-[#161726] text-slate-200 rounded-2xl rounded-tl-none border border-slate-800'
-                                    : 'bg-primary text-slate-900 font-black rounded-2xl rounded-tr-none'
-                            }`}>
-                                {msg.text}
-                            </div>
-                            <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest">{msg.time}</span>
+                ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
+                        <div className="w-24 h-24 rounded-[2rem] bg-surface border border-border flex items-center justify-center mb-8 shadow-2xl relative group">
+                            <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                            <span className="material-symbols-outlined text-4xl text-text-muted group-hover:text-primary transition-colors">folder_open</span>
                         </div>
-                    ))}
-                    {isChatting && (
-                        <div className="flex items-center gap-3 px-4 py-3 bg-[#161726] rounded-2xl border border-slate-800 w-fit">
-                            <div className="flex gap-1">
-                                <span className="w-1 h-1 bg-primary rounded-full animate-bounce"></span>
-                                <span className="w-1 h-1 bg-primary rounded-full animate-bounce [animation-delay:0.2s]"></span>
-                                <span className="w-1 h-1 bg-primary rounded-full animate-bounce [animation-delay:0.4s]"></span>
-                            </div>
-                            <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest animate-pulse">Thinking...</span>
-                        </div>
-                    )}
-                </div>
-
-                {/* Chat Controls */}
-                <div className="p-6 border-t border-slate-800 bg-[#0d0d18]">
-                    <div className="flex flex-wrap gap-2 mb-4">
-                        {suggestedQuestions.map((q, i) => (
-                            <button
-                                key={i}
-                                onClick={() => setInput(q)}
-                                disabled={!selectedDoc || isChatting}
-                                className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700 text-[9px] font-black text-slate-400 uppercase tracking-widest hover:border-primary/50 hover:text-primary transition-all active:scale-95 disabled:opacity-30"
-                            >
-                                {q}
-                            </button>
-                        ))}
+                        <h2 className="text-2xl font-black uppercase tracking-tight mb-4">No Document Selected</h2>
+                        <p className="text-text-muted text-xs font-bold uppercase tracking-[0.2em] max-w-sm leading-relaxed italic">
+                            Select a document from the neural vault to initiate deep-context analysis and interactive review.
+                        </p>
                     </div>
-                    <div className="relative">
-                        <textarea
-                            className="w-full bg-[#161726] border-slate-800 rounded-2xl px-5 py-4 pr-12 text-xs font-medium text-white placeholder-slate-600 focus:ring-1 focus:ring-primary/30 focus:border-primary/30 resize-none transition-all"
-                            placeholder={selectedDoc ? "Query the document context..." : "Select a document to chat..."}
-                            rows="2"
-                            value={input}
-                            onChange={e => setInput(e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendMessage())}
-                            disabled={!selectedDoc || isChatting}
-                        ></textarea>
-                        <button
-                            onClick={handleSendMessage}
-                            disabled={!selectedDoc || isChatting || !input.trim()}
-                            className={`absolute right-3 bottom-3 p-2.5 rounded-xl transition-all ${
-                                !selectedDoc || isChatting || !input.trim() 
-                                    ? 'text-slate-700' 
-                                    : 'text-primary hover:scale-110 active:scale-90'
-                            }`}
-                        >
-                            <span className="material-symbols-outlined font-black">send_spark</span>
-                        </button>
-                    </div>
-                </div>
-            </aside>
+                )}
+            </div>
         </div>
     );
 }

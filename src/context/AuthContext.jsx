@@ -1,4 +1,6 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
+import { BASE_URL } from '../utils/api';
+
 
 const AuthContext = createContext();
 
@@ -9,7 +11,7 @@ export const AuthProvider = ({ children }) => {
     const [token, setToken] = useState(localStorage.getItem('lexnet_token') || null);
     const [loading, setLoading] = useState(true);
 
-    const BASE_URL = 'http://localhost:8000';
+
 
     useEffect(() => {
         if (token) {

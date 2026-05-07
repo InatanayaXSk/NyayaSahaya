@@ -1,0 +1,21 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="60" cy="60" r="50" stroke="#EF4444" stroke-width="8" stroke-linecap="round" />
+  <path d="M40 40L80 80M80 40L40 80" stroke="#EF4444" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+  <style>
+    path {
+      stroke-dasharray: 100;
+      stroke-dashoffset: 100;
+      animation: dash 0.8s ease-out forwards;
+    }
+    circle {
+      stroke-dasharray: 320;
+      stroke-dashoffset: 320;
+      animation: dash 1s ease-out forwards;
+    }
+    @keyframes dash {
+      to {
+        stroke-dashoffset: 0;
+      }
+    }
+  </style>
+</svg>

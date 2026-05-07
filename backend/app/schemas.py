@@ -61,6 +61,24 @@ class SignaturePacket(BaseModel):
     status: str
 
 
+# --- Blockchain (Ethereum Sepolia) ---
+class OnChainVerifyResponse(BaseModel):
+    status: str
+    doc_hash: str
+    tx_hash: str
+    etherscan_url: str
+    rpi_signature: str
+    timestamp: str
+
+
+class OnChainStatusResponse(BaseModel):
+    sealed: bool
+    tx_hash: Optional[str] = None
+    etherscan_url: Optional[str] = None
+    chain_id: Optional[int] = None
+    on_chain_record: Optional[Dict[str, Any]] = None
+
+
 # --- Health ---
 class HealthResponse(BaseModel):
     status: str

@@ -8,3 +8,4 @@ httpx>=0.25.0
 ecdsa>=0.18.0
 alembic>=1.12.0
 cloudinary>=1.36.0
+web3>=7.0.0

@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { API_BASE, BASE_URL } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 
 const initialLogs = [
     { time: '[14:20:01]', type: 'INFO', typeColor: 'text-emerald-400', message: 'Handshake initialized with peer 192.168.1.44', opacity: 'opacity-80' },
@@ -20,19 +22,60 @@ const peerNodes = [
 
 export default function BridgeMonitorPage() {
     const [logs, setLogs] = useState(initialLogs);
+    const [hwStatus, setHwStatus] = useState({
+        status: 'checking',
+        stats: {
+            cpu_load: 0,
+            ram_usage_gb: 0,
+            ram_total_gb: 4,
+            temperature_c: 0,
+            disk_io: 'Unknown'
+        }
+    });
+    const { token } = useAuth();
     const logRef = useRef(null);
+
+    // Fetch initial status
+    useEffect(() => {
+        const fetchStatus = async () => {
+            try {
+                const res = await fetch(`${API_BASE}/hardware/heartbeat`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                const data = await res.json();
+                setHwStatus(data);
+            } catch (e) {
+                setHwStatus(prev => ({ ...prev, status: 'offline' }));
+            }
+        };
+        fetchStatus();
+        const interval = setInterval(fetchStatus, 5000);
+        return () => clearInterval(interval);
+    }, []);
 
     // WebSocket for live logs
     useEffect(() => {
         let ws;
         try {
-            ws = new WebSocket('ws://localhost:8000/ws/hardware');
+            ws = new WebSocket(BASE_URL.replace(/^http/, 'ws') + '/ws/hardware');
+
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 const typeColors = {
                     'INFO': 'text-emerald-400', 'WS': 'text-primary', 'WARN': 'text-amber-400',
-                    'API': 'text-blue-400', 'CRIT': 'text-rose-400', 'BIOMETRIC': 'text-purple-400', 'SIGN': 'text-cyan-400',
+                    'API': 'text-blue-400', 'CRIT': 'text-rose-400', 'BIOMETRIC': 'text-purple-400', 
+                    'SIGN': 'text-cyan-400', 'HEARTBEAT': 'text-pink-400'
                 };
+                
+                if (data.type === 'HEARTBEAT' && data.data) {
+                    setHwStatus(prev => ({
+                        ...prev,
+                        status: 'online',
+                        stats: data.data
+                    }));
+                }
+
                 setLogs(prev => [...prev.slice(-50), {
                     time: data.timestamp,
                     type: data.type,
@@ -50,159 +93,173 @@ export default function BridgeMonitorPage() {
         if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
     }, [logs]);
 
+    const isOnline = hwStatus.status === 'online';
+
     return (
-        <div className="bg-[#0a0a0f] text-slate-100 min-h-[calc(100vh-56px)]">
-            <div className="pt-8 pb-12 px-6 max-w-[1440px] mx-auto grid grid-cols-12 gap-6">
-                {/* Left: Main content */}
-                <div className="col-span-12 lg:col-span-8 flex flex-col gap-6">
-                    {/* Metrics */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {[
-                            { label: 'Request Throughput', value: '14.2k', unit: 'req/s', icon: 'speed', bar: 65 },
-                            { label: 'Avg. Latency', value: '24', unit: 'ms', icon: 'timer', bar: 20, barColor: 'bg-emerald-500' },
-                            { label: 'Socket Connections', value: '892', unit: 'active', icon: 'sync_alt', bar: 40 },
-                        ].map((m, i) => (
-                            <div key={i} className="bg-[#161726] border border-[#2d2e45] p-5 rounded-xl">
-                                <div className="flex justify-between items-start mb-2">
-                                    <span className="text-slate-400 text-xs font-mono uppercase">{m.label}</span>
-                                    <span className="material-symbols-outlined text-primary text-sm">{m.icon}</span>
-                                </div>
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-2xl font-bold text-slate-100">{m.value}</span>
-                                    <span className="text-[10px] text-emerald-400 font-mono">{m.unit}</span>
-                                </div>
-                                <div className="mt-4 h-1 bg-slate-800 rounded-full overflow-hidden">
-                                    <div className={`h-full ${m.barColor || 'bg-primary'}`} style={{ width: `${m.bar}%` }}></div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+        <div className="bg-background text-text-base min-h-[calc(100vh-56px)]">
+            {!isOnline && hwStatus.status !== 'checking' && (
+                <div className="bg-rose-500/10 border-b border-border py-2 px-6 flex items-center justify-center gap-3">
+                    <span className="material-symbols-outlined text-rose-500 text-sm animate-pulse">warning</span>
+                    <p className="text-[10px] font-black text-rose-500 uppercase tracking-[0.2em]">Hardware Bridge Offline - Real-time metrics suspended</p>
+                </div>
+            )}
 
-                    {/* Log Stream */}
-                    <div className="bg-[#161726] border border-[#2d2e45] rounded-xl overflow-hidden flex flex-col h-[500px]">
-                        <div className="px-5 py-4 border-b border-[#2d2e45] flex justify-between items-center bg-slate-900/30">
-                            <div className="flex items-center gap-3">
-                                <span className="material-symbols-outlined text-primary">terminal</span>
-                                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200">Bridge Stream Logs</h3>
+            <div className="max-w-7xl mx-auto p-8">
+                {/* Header Section */}
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-10 mb-16">
+                    <div>
+                        <div className="flex items-center gap-4 mb-4">
+                            <div className="p-3 bg-primary/10 rounded-2xl border border-primary/20">
+                                <span className="material-symbols-outlined text-primary text-3xl">hub</span>
                             </div>
-                            <div className="flex gap-2">
-                                <span className="px-2 py-1 rounded bg-emerald-500/10 text-emerald-500 text-[10px] font-bold uppercase border border-emerald-500/20">Live</span>
-                                <span className="px-2 py-1 rounded bg-slate-800 text-slate-400 text-[10px] font-bold uppercase border border-[#2d2e45]">Debug Mode</span>
+                            <h1 className="text-4xl font-black tracking-tight uppercase">Network <span className="text-primary">Bridge</span></h1>
+                        </div>
+                        <p className="text-text-muted text-[11px] font-bold uppercase tracking-widest max-w-xl leading-relaxed italic">Live telemetry stream from the NyayaSahaya Hardware Interface. Monitoring node health, peer-to-peer consensus, and biometric authorization cycles.</p>
+                    </div>
+                    
+                    <div className="flex items-center gap-8 bg-surface border border-border p-6 rounded-[2rem] shadow-xl">
+                        <div className="text-center px-6">
+                            <p className="text-[9px] font-black text-text-muted uppercase tracking-[0.2em] mb-2">Global Pulse</p>
+                            <div className="flex items-center justify-center gap-3">
+                                <div className={`w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-primary' : 'bg-rose-500'} shadow-[0_0_12px_rgba(var(--color-primary),0.6)] animate-pulse`}></div>
+                                <span className="text-[11px] font-black uppercase tracking-widest">{isOnline ? 'Active' : 'Offline'}</span>
                             </div>
                         </div>
-                        <div ref={logRef} className="flex-1 p-4 font-mono text-[12px] overflow-y-auto bg-black/40">
-                            {logs.map((log, i) => (
-                                <div key={i} className={`flex gap-4 mb-2 ${log.opacity || ''} ${log.animate ? 'text-rose-400 animate-pulse' : ''}`}>
-                                    <span className="text-slate-500">{log.time}</span>
-                                    <span className={log.typeColor}>{log.type}</span>
-                                    <span className="text-slate-300">{log.message}</span>
-                                </div>
-                            ))}
-                        </div>
-                        <div className="p-3 border-t border-[#2d2e45] bg-slate-900/50 flex items-center gap-3">
-                            <span className="material-symbols-outlined text-slate-500 text-sm">chevron_right</span>
-                            <input className="bg-transparent border-none focus:ring-0 text-xs font-mono text-slate-300 w-full placeholder:text-slate-600" placeholder="Type command (e.g. /filter warn)..." type="text" />
+                        <div className="w-px h-10 bg-border"></div>
+                        <div className="text-center px-6">
+                            <p className="text-[9px] font-black text-text-muted uppercase tracking-[0.2em] mb-2">Consensus Latency</p>
+                            <span className="text-[11px] font-black uppercase tracking-widest font-mono">{isOnline ? '12ms' : '--'}</span>
                         </div>
                     </div>
                 </div>
 
-                {/* Right: Sidebar */}
-                <div className="col-span-12 lg:col-span-4 flex flex-col gap-6">
-                    {/* Hardware Heartbeat */}
-                    <div className="bg-[#161726] border border-[#2d2e45] rounded-xl p-6">
-                        <div className="flex items-center justify-between mb-6">
-                            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200">Hardware Heartbeat</h3>
-                            <span className="material-symbols-outlined text-primary">monitor_heart</span>
-                        </div>
-                        <div className="space-y-6">
-                            {[
-                                { label: 'CPU Load (Cluster)', value: '42.8%', percent: 42.8 },
-                                { label: 'RAM Usage', value: '8.4 / 16 GB', percent: 52 },
-                            ].map((stat, i) => (
-                                <div key={i}>
-                                    <div className="flex justify-between text-[11px] font-mono mb-2">
-                                        <span className="text-slate-400 uppercase">{stat.label}</span>
-                                        <span className="text-primary">{stat.value}</span>
+                {/* Grid Layout */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    
+                    {/* Hardware Stats Column */}
+                    <div className="lg:col-span-8 space-y-8">
+                        {/* Health Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="bg-surface border border-border p-8 rounded-[2.5rem] group hover:border-primary/50 transition-all shadow-sm hover:shadow-2xl">
+                                <div className="flex items-center justify-between mb-6">
+                                    <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform border border-primary/20">
+                                        <span className="material-symbols-outlined text-primary text-2xl">memory</span>
                                     </div>
-                                    <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                                        <div className="h-full bg-primary rounded-full" style={{ width: `${stat.percent}%` }}></div>
+                                    <span className="text-[9px] font-black text-text-muted uppercase tracking-[0.2em]">Compute Load</span>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="flex items-end justify-between">
+                                        <p className="text-3xl font-black leading-none">{isOnline ? (hwStatus.stats?.cpu_load || 0) : '0'}<span className="text-sm text-text-muted ml-1 opacity-50">%</span></p>
+                                        <p className="text-[10px] font-black text-primary uppercase tracking-widest">Normal</p>
+                                    </div>
+                                    <div className="h-2 bg-background rounded-full overflow-hidden p-0.5 border border-border">
+                                        <div className="h-full bg-primary rounded-full transition-all duration-1000 shadow-[0_0_10px_rgba(var(--color-primary),0.5)]" style={{ width: `${isOnline ? (hwStatus.stats?.cpu_load || 0) : 0}%` }}></div>
                                     </div>
                                 </div>
-                            ))}
-                            <div>
-                                <div className="flex justify-between text-[11px] font-mono mb-2">
-                                    <span className="text-slate-400 uppercase">Disk I/O</span>
-                                    <span className="text-emerald-400">Stable</span>
+                            </div>
+
+                            <div className="bg-surface border border-border p-8 rounded-[2.5rem] group hover:border-primary/50 transition-all shadow-sm hover:shadow-2xl">
+                                <div className="flex items-center justify-between mb-6">
+                                    <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform border border-primary/20">
+                                        <span className="material-symbols-outlined text-primary text-2xl">storage</span>
+                                    </div>
+                                    <span className="text-[9px] font-black text-text-muted uppercase tracking-[0.2em]">Neural Memory</span>
                                 </div>
-                                <div className="h-16 flex items-end gap-1">
-                                    {[30, 45, 25, 60, 85, 40, 55, 35].map((h, i) => (
-                                        <div key={i} className="flex-1 bg-primary/30 rounded-t-sm" style={{ height: `${h}%` }}></div>
-                                    ))}
+                                <div className="space-y-4">
+                                    <div className="flex items-end justify-between">
+                                        <p className="text-3xl font-black leading-none">{isOnline ? (hwStatus.stats?.ram_usage_gb || 0).toFixed(2) : '0.00'}<span className="text-sm text-text-muted ml-2 opacity-50">/ {hwStatus.stats?.ram_total_gb || 4} GB</span></p>
+                                        <p className="text-[10px] font-black text-primary uppercase tracking-widest">{isOnline ? 'Syncing' : '--'}</p>
+                                    </div>
+                                    <div className="h-2 bg-background rounded-full overflow-hidden p-0.5 border border-border">
+                                        <div className="h-full bg-primary rounded-full transition-all duration-1000 shadow-[0_0_10px_rgba(var(--color-primary),0.5)]" style={{ width: `${isOnline ? ((hwStatus.stats?.ram_usage_gb || 0) / (hwStatus.stats?.ram_total_gb || 4)) * 100 : 0}%` }}></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-surface border border-border p-8 rounded-[2.5rem] group hover:border-primary/50 transition-all shadow-sm hover:shadow-2xl">
+                                <div className="flex items-center justify-between mb-6">
+                                    <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform border border-primary/20">
+                                        <span className="material-symbols-outlined text-primary text-2xl">thermostat</span>
+                                    </div>
+                                    <span className="text-[9px] font-black text-text-muted uppercase tracking-[0.2em]">Core Temp</span>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="flex items-end justify-between">
+                                        <p className="text-3xl font-black leading-none">{isOnline ? (hwStatus.stats?.temperature_c || 0) : '0'}<span className="text-sm text-text-muted ml-1 opacity-50">°C</span></p>
+                                        <p className="text-[10px] font-black text-primary uppercase tracking-widest">{isOnline ? 'Nominal' : '--'}</p>
+                                    </div>
+                                    <div className="h-2 bg-background rounded-full overflow-hidden p-0.5 border border-border">
+                                        <div className="h-full bg-primary rounded-full transition-all duration-1000 shadow-[0_0_10px_rgba(var(--color-primary),0.5)]" style={{ width: `${isOnline ? ((hwStatus.stats?.temperature_c || 0) / 85) * 100 : 0}%` }}></div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    {/* Active Peers */}
-                    <div className="bg-[#161726] border border-[#2d2e45] rounded-xl flex flex-col">
-                        <div className="px-5 py-4 border-b border-[#2d2e45]">
-                            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200">Active Peer Nodes</h3>
-                        </div>
-                        <div className="divide-y divide-[#2d2e45]">
-                            {peerNodes.map((node, i) => (
-                                <div key={i} className="px-5 py-3 flex items-center justify-between hover:bg-slate-800/30 transition-colors cursor-pointer">
-                                    <div className="flex flex-col">
-                                        <span className="text-xs font-mono text-slate-200">{node.name}</span>
-                                        <span className="text-[10px] text-slate-500 font-mono">{node.ip}</span>
-                                    </div>
-                                    <div className="text-right">
-                                        <span className={`text-[10px] block ${node.statusColor} font-bold uppercase`}>{node.status}</span>
-                                        <span className="text-[10px] text-slate-500 font-mono">Lat: {node.latency}</span>
-                                    </div>
+                        {/* Logs Section */}
+                        <div className="bg-surface border border-border rounded-[2.5rem] overflow-hidden flex flex-col h-[450px] shadow-sm">
+                            <div className="px-8 py-5 border-b border-border bg-surface flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-primary shadow-[0_0_10px_rgba(var(--color-primary),0.8)]"></span>
+                                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em]">Real-time Telemetry Stream</h3>
                                 </div>
-                            ))}
-                        </div>
-                        <button className="w-full py-3 text-[10px] text-primary/70 hover:text-primary uppercase font-bold tracking-widest bg-slate-900/20">
-                            View All 14 Nodes
-                        </button>
-                    </div>
-
-                    {/* Security Card */}
-                    <div className="bg-primary/10 border border-primary/20 rounded-xl p-5 relative overflow-hidden group">
-                        <div className="absolute -right-4 -bottom-4 opacity-10 transform group-hover:scale-110 transition-transform">
-                            <span className="material-symbols-outlined text-8xl">shield</span>
-                        </div>
-                        <h4 className="text-xs font-bold text-primary uppercase mb-2">Bridge Security</h4>
-                        <p className="text-[11px] text-slate-300 leading-relaxed mb-4">WAF is currently inspecting 100% of packets. No anomalies detected in the last 24 hours.</p>
-                        <button className="px-3 py-1.5 bg-primary text-[#0a0a0f] text-[10px] font-bold rounded-lg uppercase">Run Audit</button>
-                    </div>
-                </div>
-
-                {/* Request Distribution Chart */}
-                <div className="col-span-12">
-                    <div className="bg-[#161726] border border-[#2d2e45] rounded-xl overflow-hidden">
-                        <div className="px-5 py-4 border-b border-[#2d2e45] flex justify-between items-center">
-                            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200">Request Distribution (Last 24h)</h3>
-                            <div className="flex gap-4">
-                                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-primary"></div><span className="text-[10px] text-slate-400 font-mono uppercase">WebSocket</span></div>
-                                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-500"></div><span className="text-[10px] text-slate-400 font-mono uppercase">REST API</span></div>
+                                <div className="px-3 py-1 bg-background border border-border rounded-full">
+                                    <span className="text-[9px] font-black font-mono text-text-muted tracking-tight">NODE_CORE_V4.2</span>
+                                </div>
                             </div>
-                        </div>
-                        <div className="p-6 h-48 relative">
-                            <svg className="w-full h-full" preserveAspectRatio="none" viewBox="0 0 1000 100">
-                                <defs>
-                                    <linearGradient id="chartGrad" x1="0%" x2="0%" y1="0%" y2="100%">
-                                        <stop offset="0%" style={{ stopColor: '#bbbdf6', stopOpacity: 1 }} />
-                                        <stop offset="100%" style={{ stopColor: '#bbbdf6', stopOpacity: 0 }} />
-                                    </linearGradient>
-                                </defs>
-                                <path d="M0,80 Q100,20 200,60 T400,40 T600,70 T800,30 T1000,50 L1000,100 L0,100 Z" fill="url(#chartGrad)" opacity="0.4" />
-                                <path d="M0,80 Q100,20 200,60 T400,40 T600,70 T800,30 T1000,50" fill="none" stroke="#bbbdf6" strokeWidth="2" />
-                            </svg>
-                            <div className="absolute inset-0 p-6 flex justify-between items-end pointer-events-none">
-                                {['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '23:59'].map((t, i) => (
-                                    <span key={i} className="text-[9px] text-slate-600 font-mono">{t}</span>
+                            <div ref={logRef} className="flex-1 overflow-y-auto p-8 font-mono text-[10px] space-y-3 scroll-smooth custom-scrollbar bg-background/20 backdrop-blur-3xl">
+                                {logs.map((log, i) => (
+                                    <div key={i} className={`flex gap-6 border-l-2 border-transparent hover:border-primary/30 pl-4 transition-all group ${log.opacity || 'opacity-100'} ${log.animate ? 'animate-pulse' : ''}`}>
+                                        <span className="text-text-muted whitespace-nowrap opacity-50 group-hover:opacity-100">{log.time}</span>
+                                        <span className={`font-black whitespace-nowrap min-w-[60px] tracking-widest ${log.typeColor}`}>{log.type}</span>
+                                        <span className="text-text-base opacity-80 group-hover:opacity-100 leading-relaxed font-medium">{log.message}</span>
+                                    </div>
                                 ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Side Info Column */}
+                    <div className="lg:col-span-4 space-y-8">
+                        {/* Peer Nodes */}
+                        <div className="bg-surface border border-border p-8 rounded-3xl">
+                            <h3 className="text-xs font-black uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
+                                <span className="material-symbols-outlined text-sm text-primary">diversity_3</span> Active Peers
+                            </h3>
+                            <div className="space-y-6">
+                                {peerNodes.map((peer, i) => (
+                                    <div key={i} className="flex items-center justify-between group">
+                                        <div>
+                                            <p className="text-xs font-black uppercase tracking-wider mb-0.5">{peer.name}</p>
+                                            <p className="text-[10px] font-mono text-text-muted">{peer.ip}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className={`text-[9px] font-black uppercase tracking-widest ${peer.statusColor}`}>{peer.status}</p>
+                                            <p className="text-[9px] font-mono text-text-muted">{peer.latency}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <button className="w-full mt-8 py-3 border border-border rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary hover:text-slate-900 transition-all">
+                                Refresh Peering
+                            </button>
+                        </div>
+
+                        {/* Security Protocol */}
+                        <div className="bg-surface border border-border p-8 rounded-3xl relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full -mr-12 -mt-12 group-hover:scale-150 transition-transform duration-700"></div>
+                            <h3 className="text-xs font-black uppercase tracking-[0.2em] mb-4 relative z-10">Security Protocol</h3>
+                            <p className="text-[11px] text-text-muted leading-relaxed mb-6 relative z-10">
+                                This bridge utilizes RSA-4096 and ECDSA-P256 for all hardware handshakes. Periodic rotation of ephemeral keys occurs every 3600s.
+                            </p>
+                            <div className="p-4 bg-background/50 rounded-2xl border border-border space-y-3 relative z-10">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[9px] font-black text-text-muted uppercase tracking-widest">TLS 1.3 Audit</span>
+                                    <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">Passed</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[9px] font-black text-text-muted uppercase tracking-widest">Entropy Check</span>
+                                    <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">Optimal</span>
+                                </div>
                             </div>
                         </div>
                     </div>
