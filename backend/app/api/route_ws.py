@@ -43,8 +43,7 @@ async def websocket_hardware(websocket: WebSocket):
     await websocket.accept()
     clients.append(websocket)
     
-    queue = asyncio.Queue()
-    await hardware_provider.subscribe(queue)
+    queue = hardware_provider.subscribe()
     
     try:
         while True:

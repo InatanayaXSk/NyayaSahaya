@@ -44,7 +44,7 @@ export default function BridgeMonitorPage() {
             }
         };
         fetchStatus();
-        const interval = setInterval(fetchStatus, 5000);
+        const interval = setInterval(fetchStatus, 30000);
         return () => clearInterval(interval);
     }, []);
 

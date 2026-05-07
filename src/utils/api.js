@@ -10,17 +10,17 @@ export const RPI_BASE = import.meta.env.VITE_RPI_URL || 'http://localhost:8001';
 
 // API Endpoints
 export const ENDPOINTS = {
-    DOCUMENTS: `${API_BASE}/api/documents`,
-    STATS: `${API_BASE}/api/documents/stats`,
-    DOWNLOAD: `${API_BASE}/api/download`,
-    GENERATE: `${API_BASE}/api/generate-doc`,
-    VERIFY_UPLOAD: `${API_BASE}/api/verify-upload`,
-    ANALYZE: `${API_BASE}/api/analyze`,
+    DOCUMENTS: `${API_BASE}/documents`,
+    STATS: `${API_BASE}/documents/stats`,
+    DOWNLOAD: `${API_BASE}/download`,
+    GENERATE: `${API_BASE}/generate-doc`,
+    VERIFY_UPLOAD: `${API_BASE}/verify-upload`,
+    ANALYZE: `${API_BASE}/analyze`,
     HARDWARE: {
-        HEARTBEAT: `${API_BASE}/api/hardware/heartbeat`,
-        AUTHENTICATE: `${API_BASE}/api/hardware/authenticate`,
-        VERIFY_ON_CHAIN: `${API_BASE}/api/hardware/documents`, // Will need suffix /verify-on-chain
-        CHAIN_STATUS: `${API_BASE}/api/hardware/documents`, // Will need suffix /chain-status
+        STATUS: `${API_BASE}/hardware/status`,
+        AUTHENTICATE: `${API_BASE}/hardware/authenticate`,
+        VERIFY_ON_CHAIN: `${API_BASE}/hardware/documents`, // Will need suffix /verify-on-chain
+        CHAIN_STATUS: `${API_BASE}/hardware/documents`, // Will need suffix /chain-status
         WS: API_BASE.replace(/^http/, 'ws') + '/ws/hardware'
     }
 };

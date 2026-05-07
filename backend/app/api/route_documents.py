@@ -169,7 +169,7 @@ async def list_documents(current_user: User = Depends(get_current_user), db: Asy
     
     return {"documents": documents}
     
-@router.get("/download/{public_id}")
+@router.get("/download/{public_id:path}")
 async def download_document(public_id: str, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Securely download a PDF with correct headers to prevent .html issues."""
     # RBAC check
@@ -185,6 +185,7 @@ async def download_document(public_id: str, current_user: User = Depends(get_cur
         raise HTTPException(status_code=403, detail="Access denied or document not found")
         
     file_path = file_service.get_file_path(public_id)
+    print(f"[DOWNLOAD] public_id={public_id}, path={file_path}, exists={os.path.exists(file_path)}")
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found on disk")
         
@@ -252,7 +253,7 @@ async def get_dashboard_stats(current_user: User = Depends(get_current_user), db
         "total_users": user_count
     }
 
-@router.get("/documents/{id_or_public_id}")
+@router.get("/documents/{id_or_public_id:path}")
 async def get_document(id_or_public_id: str, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Retrieve document details from SQL Ledger & Local Storage."""
     # Handle both integer IDs and string public_ids

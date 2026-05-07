@@ -75,7 +75,7 @@ export default function DocumentViewPage() {
 
     const fetchHardwareStatus = async () => {
         try {
-            const res = await fetch(`${API_BASE}/hardware/heartbeat`, {
+            const res = await fetch(`${API_BASE}/hardware/status`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
@@ -96,7 +96,7 @@ export default function DocumentViewPage() {
             fetchChainStatus();
             fetchHardwareStatus();
             
-            const interval = setInterval(fetchHardwareStatus, 10000);
+            const interval = setInterval(fetchHardwareStatus, 30000);
             return () => clearInterval(interval);
         }
         return () => {
@@ -155,40 +155,30 @@ export default function DocumentViewPage() {
         }, 3000);
     };
 
-    const handleHardwareSuccess = async (signature) => {
-        setIsHardwareModalOpen(false);
+    const handleSealingStart = async () => {
+        setIsHardwareModalOpen(true);
         setIsSealing(true);
         try {
             const res = await fetch(`${API_BASE}/hardware/documents/${id}/verify-on-chain`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ rpi_signature: signature })
+                }
             });
 
             if (res.ok) {
-                // Start polling for the transaction to be confirmed
                 pollChainStatus();
             } else {
                 const data = await res.json();
-                const errorMessage = typeof data.detail === 'string'
-                    ? data.detail
-                    : (data.detail?.message || JSON.stringify(data.detail) || "Unknown error occurred");
-                
-                if (errorMessage.toLowerCase().includes("already sealed")) {
-                    fetchDocument();
-                    fetchChainStatus();
-                    setIsSealing(false);
-                } else {
-                    alert(`Sealing Error: ${errorMessage}`);
-                    setIsSealing(false);
-                }
+                const errorMessage = data.detail || "Sealing failed";
+                alert(`Sealing Error: ${errorMessage}`);
+                setIsSealing(false);
+                setIsHardwareModalOpen(false);
             }
         } catch (err) {
-            alert("Connection to Sealing Engine failed.");
+            console.error("Sealing failed", err);
             setIsSealing(false);
+            setIsHardwareModalOpen(false);
         }
     };
 
@@ -334,7 +324,7 @@ export default function DocumentViewPage() {
                                 </p>
 
                                 <button
-                                    onClick={() => isHardwareOnline && setIsHardwareModalOpen(true)}
+                                    onClick={() => isHardwareOnline && handleSealingStart()}
                                     disabled={!isHardwareOnline}
                                     className={`w-full py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.3em] shadow-lg transition-all flex items-center justify-center gap-3 mt-auto ${isHardwareOnline 
                                         ? 'bg-primary text-slate-900 shadow-primary/20 hover:scale-105 active:scale-95' 
@@ -426,7 +416,6 @@ export default function DocumentViewPage() {
             <HardwareAuthModal
                 isOpen={isHardwareModalOpen}
                 onClose={() => setIsHardwareModalOpen(false)}
-                onSuccess={handleHardwareSuccess}
                 documentId={doc.public_id}
             />
         </div>

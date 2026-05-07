@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models import User, DocumentLedger
+from app.models import User, DocumentLedger, Role
 from app.api.route_users import get_current_user
 from app.database import get_db
 from app.services.hardware_provider import hardware_provider

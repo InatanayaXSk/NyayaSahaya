@@ -44,40 +44,47 @@ export default function HardwareAuthModal({ isOpen, onClose, onSuccess, document
             ws.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
-                    if (data.type === 'auth_event') {
-                        const step = data.data.step;
-                        const msg = data.data.message;
-                        
-                        if (step === 'start') {
-                            setAuthSteps([
-                                { name: 'Initial Handshake', status: 'Complete', done: true, active: false },
-                                { name: 'Hardware ID Check', status: msg, done: false, active: true },
-                                { name: 'Biometric Verification', status: 'Waiting...', done: false, active: false },
-                                { name: 'Final Token Grant', status: 'Waiting...', done: false, active: false }
-                            ]);
-                        } else if (step === 'processing') {
-                            setBiometricMatch(85.4);
-                            setConfidence("0.9982");
-                            setAuthSteps([
-                                { name: 'Initial Handshake', status: 'Complete', done: true, active: false },
-                                { name: 'Hardware ID Check', status: 'Verified', done: true, active: false },
-                                { name: 'Biometric Verification', status: msg, done: false, active: true },
-                                { name: 'Final Token Grant', status: 'Waiting...', done: false, active: false }
-                            ]);
-                        } else if (step === 'success') {
-                            setBiometricMatch(99.9);
-                            setConfidence("1.0000");
-                            setAuthSteps([
-                                { name: 'Initial Handshake', status: 'Complete', done: true, active: false },
-                                { name: 'Hardware ID Check', status: 'Verified', done: true, active: false },
-                                { name: 'Biometric Verification', status: 'Success', done: true, active: false },
-                                { name: 'Final Token Grant', status: 'Token Granted', done: true, active: false }
-                            ]);
-                            // Send success payload back after brief delay for visual
+                    const step = data.step;
+                    const msg = data.message;
+                    const eventType = data.event;
+                    
+                    if (eventType === 'AUTH_START' || step === 'start') {
+                        setIsAuthenticating(true);
+                        setAuthSteps([
+                            { name: 'Initial Handshake', status: 'Complete', done: true, active: false },
+                            { name: 'Hardware ID Check', status: msg, done: false, active: true },
+                            { name: 'Biometric Verification', status: 'Waiting...', done: false, active: false },
+                            { name: 'Final Token Grant', status: 'Waiting...', done: false, active: false }
+                        ]);
+                    } else if (eventType === 'AUTH_PROC' || step === 'processing') {
+                        setIsAuthenticating(true);
+                        setBiometricMatch(85.4);
+                        setConfidence("0.9982");
+                        setAuthSteps([
+                            { name: 'Initial Handshake', status: 'Complete', done: true, active: false },
+                            { name: 'Hardware ID Check', status: 'Verified', done: true, active: false },
+                            { name: 'Biometric Verification', status: msg, done: false, active: true },
+                            { name: 'Final Token Grant', status: 'Waiting...', done: false, active: false }
+                        ]);
+                    } else if (eventType === 'BIOMETRIC' || step === 'success') {
+                        setIsAuthenticating(true);
+                        setBiometricMatch(99.9);
+                        setConfidence("1.0000");
+                        setAuthSteps([
+                            { name: 'Initial Handshake', status: 'Complete', done: true, active: false },
+                            { name: 'Hardware ID Check', status: 'Verified', done: true, active: false },
+                            { name: 'Biometric Verification', status: 'Success', done: true, active: false },
+                            { name: 'Final Token Grant', status: 'Token Granted', done: true, active: false }
+                        ]);
+                        // Send success payload back after brief delay for visual
+                        if (data.signature) {
                             setTimeout(() => {
-                                onSuccess(data.data.signature);
+                                if (onSuccess) onSuccess(data.signature);
                             }, 1500);
                         }
+                    } else if (eventType === 'WARN') {
+                        setAuthSteps(prev => prev.map(s => s.active ? { ...s, status: `Error: ${msg}`, active: false } : s));
+                        setIsAuthenticating(false);
                     }
                 } catch (e) {
                     console.error("WS Parse Error:", e);
@@ -168,25 +175,24 @@ export default function HardwareAuthModal({ isOpen, onClose, onSuccess, document
                         </div>
 
                         <div className="mt-auto pt-6 border-t border-border">
-                            <button 
-                                onClick={triggerAuth} 
-                                disabled={isAuthenticating || status !== 'Online'}
-                                className="w-full bg-primary text-slate-900 font-black text-xs py-4 rounded-xl uppercase tracking-widest shadow-lg shadow-primary/20 hover:brightness-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                            >
-                                {isAuthenticating ? (
-                                    <>
-                                        <span className="material-symbols-outlined text-sm animate-spin">refresh</span>
-                                        Authorizing...
-                                    </>
-                                ) : status === 'Online' ? (
-                                    <>
-                                        <span className="material-symbols-outlined text-sm">contactless</span>
-                                        Tap Token & Scan
-                                    </>
-                                ) : (
-                                    "Node Offline"
-                                )}
-                            </button>
+                            {isAuthenticating ? (
+                                <div className="p-4 bg-primary/10 border border-primary/20 rounded-xl">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className="w-2 h-2 rounded-full bg-primary animate-ping"></div>
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-primary">Live Scan in Progress</span>
+                                    </div>
+                                    <p className="text-[10px] text-text-muted uppercase tracking-tight">Please follow the instructions on the hardware node's LCD screen.</p>
+                                </div>
+                            ) : (
+                                <button 
+                                    onClick={triggerAuth} 
+                                    disabled={status !== 'Online'}
+                                    className="w-full bg-primary text-slate-900 font-black text-xs py-4 rounded-xl uppercase tracking-widest shadow-lg shadow-primary/20 hover:brightness-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                >
+                                    <span className="material-symbols-outlined text-sm">contactless</span>
+                                    Tap Token & Scan
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
