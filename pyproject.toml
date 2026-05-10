@@ -7,4 +7,4 @@ requires-python = ">=3.14"
 dependencies = []
 
 [tool.uv]
-workspace = { members = ["backend", "legal_document_generator"] }
+workspace = { members = ["backend"] }

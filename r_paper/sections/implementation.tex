@@ -1,0 +1,11 @@
+% =============================================================
+% SECTION V: IMPLEMENTATION
+% =============================================================
+\section{Implementation Details}
+\label{sec:implementation}
+
+This section summarizes the system realization at an abstract level. NyayaSahaya is implemented as a set of modular services that align with the architecture described earlier, with clear separation between the user interface, orchestration logic, and trusted edge component. The design emphasizes confidentiality, access control, and auditability, while keeping operational details and code-level specifics out of the paper.
+
+Key implementation considerations include secure boundary enforcement between layers, consistent user experience across legal workflows, and resilient processing of document ingestion, analysis, and integrity checks. The overall design aims to balance responsiveness with trust, ensuring that sensitive operations remain isolated from the client while still providing timely feedback to users.
+
+To support real-world legal use, the system also incorporates careful state management and error handling paths so that interruptions do not compromise document integrity or user confidence. The interface flow is structured to make verification status visible at every stage, and the orchestration layer preserves a consistent audit trail across actions. This emphasis on predictable behavior and clear feedback is central to the platform's reliability in sensitive workflows.

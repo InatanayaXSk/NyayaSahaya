@@ -402,3 +402,32 @@ async def verify_uploaded_file(
         "hash": file_hash,
         "etherscan_url": f"https://sepolia.etherscan.io/tx/{doc.eth_tx_hash}" if doc.eth_tx_hash else None
     }
+
+@router.get("/documents/similar-cases")
+async def get_similar_cases(
+    public_id: str,
+    force: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Retrieve or dynamically generate similar cases for a document with strict RBAC."""
+    if not public_id:
+        raise HTTPException(status_code=400, detail="public_id is required")
+
+    # SQL-based RBAC check
+    stmt = select(DocumentLedger).where(
+        (DocumentLedger.public_id == public_id) & 
+        ((DocumentLedger.owner_username == current_user.username) | 
+         (DocumentLedger.shared_with.any(User.username == current_user.username)))
+    )
+    result = await db.execute(stmt)
+    doc = result.scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=403, detail="Access denied or document not found")
+
+    file_path = file_service.get_file_path(public_id)
+    similar_cases = await ai_analyzer.get_similar_cases(
+        file_path, public_id=public_id, document_type=doc.document_type, force=force, db=db
+    )
+    return {"similar_cases": similar_cases}

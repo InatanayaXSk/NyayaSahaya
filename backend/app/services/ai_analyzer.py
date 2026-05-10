@@ -339,6 +339,23 @@ Instructions: Answer the user's question comprehensively. Use the provided conte
             yield text_context
             return
 
+        similar_cases_context = ""
+        if db:
+            try:
+                from sqlalchemy.orm import selectinload
+                stmt = select(DocumentLedger).options(selectinload(DocumentLedger.analysis)).where(DocumentLedger.public_id == public_id)
+                res = await db.execute(stmt)
+                doc_ledger = res.scalar_one_or_none()
+                if doc_ledger and doc_ledger.analysis:
+                    analysis_data = doc_ledger.analysis.analysis_data or {}
+                    similar_cases = analysis_data.get("similar_cases", [])
+                    if similar_cases:
+                        similar_cases_context = "\n\nSimilar Cases & Web Search Context (Feedback Loop):\n"
+                        for i, case in enumerate(similar_cases, 1):
+                            similar_cases_context += f"Case {i}: {case.get('title')}\nLink: {case.get('link')}\nSummary: {case.get('summary')}\n\n"
+            except Exception as e:
+                print(f"[LexNet] Error extracting similar cases for prompt feedback loop: {e}")
+
         formatted_history = ""
         if history:
             for h in history:
@@ -349,9 +366,10 @@ Instructions: Answer the user's question comprehensively. Use the provided conte
                 formatted_history += f"{role}: {text}\n"
 
         prompt = f"""
-        You are a legal assistant. Answer the user's question based on the document text.
+        You are a legal assistant. Answer the user's question based on the document text and the web search feedback context provided.
         Document Text:
         {text_context}
+        {similar_cases_context}
         
         Chat History:
         {formatted_history}
@@ -361,6 +379,192 @@ Instructions: Answer the user's question comprehensively. Use the provided conte
         
         async for chunk in self._call_llama_server_stream(prompt):
             yield chunk
+
+    async def get_similar_cases(self, file_path: str, public_id: str, document_type: str, force: bool = False, db=None) -> list:
+        """Fetch cached similar cases or generate them using AI-designed regex patterns and web search."""
+        import re
+        # 1. Try to fetch from DB first
+        ledger_doc = None
+        if db:
+            from sqlalchemy.orm import selectinload
+            stmt = select(DocumentLedger).options(selectinload(DocumentLedger.analysis)).where(DocumentLedger.public_id == public_id)
+            res = await db.execute(stmt)
+            ledger_doc = res.scalar_one_or_none()
+            
+            if ledger_doc and ledger_doc.analysis and not force:
+                cached_data = ledger_doc.analysis.analysis_data or {}
+                if "similar_cases" in cached_data and len(cached_data["similar_cases"]) > 0:
+                    print(f"[LexNet] similar_cases cache HIT for {public_id}")
+                    return cached_data["similar_cases"]
+        
+        # 2. Extract text context
+        text_context = await self._get_local_text(file_path, public_id, db=db)
+        if "ERROR_" in text_context:
+            return []
+
+        # 3. Dynamic search blueprint via AI
+        blueprint_prompt = f"""
+        You are an expert Indian legal advisor. We need to find similar cases, precedents, or landmark judgments for a document of type '{document_type}'.
+        Here is a portion of the document content:
+        ---
+        {text_context[:4000]}
+        ---
+        
+        Analyze this text and generate up to 3 web search strategies. Each strategy must contain:
+        1. A regular expression pattern with named capture groups to extract specific entities (like acts, sections, parties, or clauses) from the document text.
+        2. A search query template that uses those capture group names as placeholders (e.g., "similar cases section {{section}} of {{act}} India").
+        3. A fallback search query in case the regular expression doesn't match anything.
+        
+        Examples of strategies:
+        - Regex: "(?i)(?:section|sec\\\\.?)\\\\s*(?P<section>\\\\d+\\\\w*)\\\\s*(?:of|,\\\\s*)\\\\s*(?:the\\\\s+)?(?P<act>[A-Z][a-zA-Z\\\\s]+Act)"
+          Template: "landmark case laws under Section {{section}} of {{act}} India"
+          Fallback: "landmark legal cases for {document_type} India"
+          
+        - Regex: "(?i)(?P<party1>[A-Z][a-zA-Z\\\\s]+)\\\\s+v(?:s)?\\\\.\\\\s+(?P<party2>[A-Z][a-zA-Z\\\\s]+)"
+          Template: "similar judgments to {{party1}} vs {{party2}} India"
+          Fallback: "dispute precedent cases {document_type} India"
+
+        Return ONLY a JSON object with this exact schema:
+        {{
+            "strategies": [
+                {{
+                    "regex": "...",
+                    "template": "...",
+                    "fallback": "..."
+                }}
+            ]
+        }}
+        Ensure the regex strings are valid python regular expressions with properly escaped backslashes for JSON.
+        """
+        
+        strategies = []
+        try:
+            raw_blueprint = await self._call_llama_server(blueprint_prompt, json_format=True)
+            json_match = re.search(r'(\{.*\})', raw_blueprint, re.DOTALL)
+            if json_match:
+                raw_blueprint = json_match.group(1)
+            blueprint_data = json.loads(raw_blueprint)
+            strategies = blueprint_data.get("strategies", [])
+        except Exception as e:
+            print(f"[LexNet] Blueprint generation failed: {e}")
+
+        if not strategies:
+            strategies = [
+                {
+                    "regex": r"(?i)(?:section|sec\.?)\s*(?P<section>\d+\w*)",
+                    "template": f"precedents under Section {{section}} of {document_type} India",
+                    "fallback": f"similar legal cases for {document_type} India"
+                }
+            ]
+
+        # 4. Apply regex matching to compile queries
+        queries = []
+        for strategy in strategies:
+            regex_str = strategy.get("regex")
+            template_str = strategy.get("template")
+            fallback_str = strategy.get("fallback")
+            
+            try:
+                pattern = re.compile(regex_str)
+                match = pattern.search(text_context)
+                if match:
+                    group_data = match.groupdict()
+                    formatted_query = template_str
+                    for k, v in group_data.items():
+                        if v:
+                            formatted_query = formatted_query.replace(f"{{{k}}}", v).replace(f"{{{{{k}}}}}", v)
+                    queries.append(formatted_query)
+                else:
+                    queries.append(fallback_str)
+            except Exception as e:
+                print(f"[LexNet] Strategy execution failed for regex '{regex_str}': {e}")
+                queries.append(fallback_str)
+
+        # De-duplicate queries
+        queries = list(set([q for q in queries if q]))[:3]
+        print(f"[LexNet] Generated search queries: {queries}")
+
+        # 5. Execute Web Search using DuckDuckGo
+        search_results = []
+        try:
+            from duckduckgo_search import DDGS
+            with DDGS() as ddgs:
+                for q in queries:
+                    print(f"[LexNet] Searching DDG for: {q}")
+                    results = list(ddgs.text(q, max_results=3))
+                    for r in results:
+                        search_results.append({
+                            "title": r.get("title", ""),
+                            "link": r.get("href", ""),
+                            "snippet": r.get("body", "")
+                        })
+        except Exception as e:
+            print(f"[LexNet] Web search failed: {e}")
+
+        if not search_results:
+            print("[LexNet] No search results found from web.")
+            return []
+
+        # 6. Shorten and structure the results via AI
+        shorten_prompt = f"""
+        You are an expert legal annotator. We found these web search results for similar cases/precedents related to a legal document of type '{document_type}':
+        
+        Results:
+        {json.dumps(search_results[:6], indent=2)}
+        
+        Summarize these results into a beautiful list of similar cases.
+        For each case, provide:
+        - title: Precise name of the case (e.g. "Mohori Bibee v. Dharmodas Ghose")
+        - link: The exact direct URL from the search results
+        - summary: A crisp 2-3 sentence summary of the case facts, the legal issue, and what was decided, explaining why it is relevant to a '{document_type}'.
+        
+        Return ONLY a JSON object with this structure:
+        {{
+            "similar_cases": [
+                {{
+                    "title": "...",
+                    "link": "...",
+                    "summary": "..."
+                }}
+            ]
+        }}
+        """
+
+        similar_cases = []
+        try:
+            raw_shortened = await self._call_llama_server(shorten_prompt, json_format=True)
+            json_match = re.search(r'(\{.*\})', raw_shortened, re.DOTALL)
+            if json_match:
+                raw_shortened = json_match.group(1)
+            shortened_data = json.loads(raw_shortened)
+            similar_cases = shortened_data.get("similar_cases", [])
+        except Exception as e:
+            print(f"[LexNet] Shortening of search results failed: {e}")
+            similar_cases = [
+                {
+                    "title": r["title"],
+                    "link": r["link"],
+                    "summary": r["snippet"][:200] + "..."
+                } for r in search_results[:3]
+            ]
+
+        # 7. Persist similar_cases back to DB
+        if db and ledger_doc and similar_cases:
+            print(f"[LexNet] Saving similar cases to DB for {public_id}")
+            if ledger_doc.analysis:
+                analysis_dict = dict(ledger_doc.analysis.analysis_data or {})
+                analysis_dict["similar_cases"] = similar_cases
+                ledger_doc.analysis.analysis_data = analysis_dict
+            else:
+                analysis_dict = {**self.ANALYSIS_SCHEMA, "similar_cases": similar_cases}
+                new_analysis = DocumentAnalysis(
+                    document_id=ledger_doc.id,
+                    analysis_data=analysis_dict
+                )
+                db.add(new_analysis)
+            await db.commit()
+
+        return similar_cases
 
     async def explain_jargon_stream(self, text: str):
         """Simplifies legal jargon."""

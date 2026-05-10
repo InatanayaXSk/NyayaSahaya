@@ -1,0 +1,33 @@
+% =============================================================
+% SECTION I: INTRODUCTION
+% =============================================================
+\section{Introduction}
+\label{sec:introduction}
+
+The Indian judicial system serves a vast and diverse population, yet many citizens remain effectively excluded from meaningful legal recourse. Despite constitutional guarantees of equal access to justice~\cite{constitution_india}, studies on legal aid awareness and service distribution indicate persistent gaps, particularly for rural and semi-urban communities~\cite{nalsa2024report, bar_council_stats}.
+
+Recent advances in Natural Language Processing (NLP), particularly the emergence of Large Language Models (LLMs) and Retrieval-Augmented Generation (RAG)~\cite{lewis2020rag}, have opened new avenues for democratizing domain-specific knowledge. Several research groups have explored the application of conversational AI to the Indian legal domain~\cite{panchal2025lawpal, bharatlex2025}, demonstrating that RAG-based architectures can provide semantically grounded legal guidance while mitigating the hallucination tendencies of standalone LLMs. However, existing legal-AI systems suffer from two critical limitations that impede their deployment in trust-sensitive legal workflows:
+
+\begin{enumerate}
+    \item \textbf{Absence of Hardware-Rooted Trust:} Current platforms operate entirely in software, offering no mechanism for hardware-anchored authentication or tamper-evident document provenance. In legal contexts where document authenticity carries evidentiary weight, software-only digital signatures are insufficient to establish the chain of custody required by Indian Evidence Act provisions~\cite{it_act_2000}.
+    \item \textbf{Lack of Integrated Document Lifecycle Management:} Most legal chatbots function as isolated question-answering modules, disconnected from the document generation, analysis, signing, and sharing workflows that constitute the operational reality of legal practice.
+\end{enumerate}
+
+This paper presents \textbf{NyayaSahaya} (Sanskrit: \textit{``Legal Companion''}), a comprehensive legal assistance platform that addresses both limitations through a novel integration of three pillars:
+
+\begin{itemize}
+    \item A \textbf{dual-path retrieval and grounding strategy} that supports both general legal questions and document-specific inquiries.
+    \item A \textbf{hardware-rooted authentication component} that anchors trust and verifies presence without exposing internal mechanisms to the client.
+    \item A \textbf{document lifecycle pipeline} that combines generation, analysis, integrity checks, and access control.
+\end{itemize}
+
+The user-facing frontend is designed as a guided, web-based interface that streamlines legal inquiry, document workflows, and verification status in a single experience. It emphasizes clarity, minimal steps, and consistent feedback so non-expert users can navigate complex legal tasks confidently. The overall system is organized as a presentation layer, a central orchestration layer, and a trusted edge component, enabling responsive interactions while keeping sensitive operations off the client.
+
+The principal contributions of this work are:
+\begin{enumerate}
+    \item An integrated legal assistance platform that unifies retrieval-augmented guidance, document workflows, and integrity safeguards for the Indian legal context.
+    \item A secure interaction model linking the user interface, a central orchestration service, and a trusted edge component for responsive and auditable workflows.
+    \item A privacy-conscious document analysis and sharing approach that emphasizes controlled access and accountability.
+\end{enumerate}
+
+The remainder of this paper is organized as follows. Section~\ref{sec:related_work} surveys related work across legal AI, RAG systems, and hardware-rooted trust. Section~\ref{sec:architecture} presents the overall system architecture. Section~\ref{sec:methodology} outlines the approach at an abstract level. Section~\ref{sec:implementation} summarizes the system realization without exposing sensitive details. Section~\ref{sec:results} provides a qualitative evaluation and discussion. Section~\ref{sec:conclusion} concludes the paper with directions for future work.

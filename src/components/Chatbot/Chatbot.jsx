@@ -16,6 +16,38 @@ function Chatbot() {
   const { activeDocument } = useClient();
   const [useContext, setUseContext] = useState(true);
 
+  const [similarCases, setSimilarCases] = useState([]);
+  const [loadingCases, setLoadingCases] = useState(false);
+  const [showCases, setShowCases] = useState(false);
+
+  const fetchSimilarCases = async (force = false) => {
+    if (!activeDocument) return;
+    setLoadingCases(true);
+    try {
+      const url = `${BASE_URL}/api/documents/similar-cases?public_id=${encodeURIComponent(activeDocument.public_id)}${force ? '&force=true' : ''}`;
+      const response = await fetch(url, {
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      if (!response.ok) throw new Error("Precedents scan failed");
+      const data = await response.json();
+      setSimilarCases(data.similar_cases || []);
+    } catch (err) {
+      console.error("Failed to fetch similar cases:", err);
+    } finally {
+      setLoadingCases(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeDocument && useContext) {
+      fetchSimilarCases();
+    } else {
+      setSimilarCases([]);
+    }
+  }, [activeDocument, useContext, token]);
+
 
 
   useEffect(() => {
@@ -139,6 +171,89 @@ function Chatbot() {
           </button>
         )}
       </div>
+      
+      {/* Similar Cases Precedents Drawer */}
+      {activeDocument && useContext && (
+        <div className="border-b border-border bg-surface/30 backdrop-blur-md transition-all">
+          <div 
+            onClick={() => setShowCases(!showCases)}
+            className="flex items-center justify-between p-3 cursor-pointer hover:bg-surface/50 transition-all select-none"
+          >
+            <div className="flex items-center gap-2">
+              <span className={`material-symbols-outlined text-sm ${loadingCases ? 'animate-spin text-primary' : 'text-rose-500'}`}>
+                {loadingCases ? 'sync' : 'travel_explore'}
+              </span>
+              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-text-muted">
+                {loadingCases ? 'Scanning Precedents from Web...' : `Web Precedents (${similarCases.length})`}
+              </span>
+              {!loadingCases && similarCases.length > 0 && (
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.6)]"></span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {similarCases.length > 0 && (
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    fetchSimilarCases(true);
+                  }}
+                  disabled={loadingCases}
+                  className="p-1 rounded hover:bg-primary/10 text-text-muted hover:text-primary transition-all flex items-center"
+                  title="Force re-scan precedents"
+                >
+                  <span className="material-symbols-outlined text-[14px]">refresh</span>
+                </button>
+              )}
+              <span className="material-symbols-outlined text-text-muted text-sm transform transition-transform duration-300">
+                {showCases ? 'expand_less' : 'expand_more'}
+              </span>
+            </div>
+          </div>
+
+          {showCases && (
+            <div className="p-4 pt-1 border-t border-border/40 bg-background/40 max-h-[220px] overflow-y-auto custom-scrollbar space-y-3 animate-in slide-in-from-top-1 duration-200">
+              {loadingCases && similarCases.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-6 text-center">
+                  <div className="w-6 h-6 border-2 border-rose-500/20 border-t-rose-500 rounded-full animate-spin mb-2"></div>
+                  <p className="text-[8px] font-black uppercase tracking-widest text-text-muted">Analyzing context & scanning web...</p>
+                </div>
+              ) : similarCases.length === 0 ? (
+                <div className="text-center py-6">
+                  <span className="material-symbols-outlined text-text-muted text-2xl mb-1.5">find_in_page</span>
+                  <p className="text-[8px] font-black uppercase tracking-widest text-text-muted">No precedents found on the web.</p>
+                </div>
+              ) : (
+                similarCases.map((caseItem, idx) => (
+                  <div 
+                    key={idx}
+                    className="p-3 rounded-xl bg-surface/50 border border-border/60 hover:border-rose-500/30 hover:bg-surface/80 hover:shadow-lg hover:shadow-rose-500/5 transition-all group relative overflow-hidden text-left"
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-1">
+                      <h4 className="text-[11px] font-black text-text-base leading-snug group-hover:text-primary transition-colors pr-4">
+                        {caseItem.title}
+                      </h4>
+                      {caseItem.link && (
+                        <a 
+                          href={caseItem.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1 rounded-lg bg-surface border border-border hover:border-primary/40 hover:bg-primary/10 text-text-muted hover:text-primary transition-all flex items-center shrink-0"
+                          title="View Case Judgment"
+                        >
+                          <span className="material-symbols-outlined text-[13px]">open_in_new</span>
+                        </a>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-text-muted leading-relaxed font-medium">
+                      {caseItem.summary}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-5 space-y-5 custom-scrollbar relative">
