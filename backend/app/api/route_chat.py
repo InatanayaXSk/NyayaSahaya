@@ -54,6 +54,7 @@ def handle_general_responses(question: str, skip_legal_check: bool = False):
 @router.post("/chat")
 async def chat(request: dict, current_user: User = Depends(get_current_user)):
     question = request.get("question", "").strip()
+    web_search = request.get("web_search", False)
     if not question:
         async def err_stream(): yield "Error: Question is required"
         return StreamingResponse(err_stream(), media_type="text/plain")
@@ -65,7 +66,7 @@ async def chat(request: dict, current_user: User = Depends(get_current_user)):
         return StreamingResponse(static_stream(general), media_type="text/plain")
 
     # Answer using the streaming service
-    generator = ai_analyzer.retrieval_qa_stream(question)
+    generator = ai_analyzer.retrieval_qa_stream(question, web_search=web_search)
     return StreamingResponse(generator, media_type="text/plain")
 
 @router.post("/chat/document")
@@ -75,6 +76,7 @@ async def chat_document(request: dict, current_user: User = Depends(get_current_
     public_id = request.get("public_id")
     url = request.get("url")
     history = request.get("history", [])
+    web_search = request.get("web_search", False)
 
     if not question or not public_id or not url:
          async def err_stream(): yield "Error: question, public_id, and url are required"
@@ -101,7 +103,7 @@ async def chat_document(request: dict, current_user: User = Depends(get_current_
 
     from app.services.file_service import file_service
     file_path = file_service.get_file_path(public_id)
-    generator = ai_analyzer.chat_with_doc_stream(file_path, public_id, question, history, db=db)
+    generator = ai_analyzer.chat_with_doc_stream(file_path, public_id, question, history, db=db, web_search=web_search)
     return StreamingResponse(generator, media_type="text/plain")
 
 @router.post("/analyze-doc")

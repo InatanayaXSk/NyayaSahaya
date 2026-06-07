@@ -226,8 +226,19 @@ class AIAnalyzer:
             print(f"[LexNet] Deep AI parsing failed: {e}")
             return f"ERROR_PARSING: {str(e)}"
 
-    async def retrieval_qa_stream(self, query: str):
+    async def retrieval_qa_stream(self, query: str, web_search: bool = False):
         """RAG Q&A using Ollama and FAISS (General Knowledge) with Streaming."""
+        if web_search:
+            prompt = f"""You are a knowledgeable legal assistant specializing in Indian law. 
+            Use Google Search to find landmark legal cases, precedents, or judgments in India relevant to the user's question. 
+            Answer the question comprehensively and cite similar cases or court decisions.
+            
+            User Question: {query}
+            Answer:"""
+            async for chunk in self._gemini_search_stream(prompt):
+                yield chunk
+            return
+
         if not self.index:
             yield "Demo Mode: RAG Index not configured."
             return
@@ -332,11 +343,37 @@ Instructions: Answer the user's question comprehensively. Use the provided conte
             print(f"[LexNet] JSON Parsing Failed: {error_msg}")
             return {**self.ANALYSIS_SCHEMA, "document_name": "SCAN_FAILURE", "summary": error_msg}
 
-    async def chat_with_doc_stream(self, file_path: str, public_id: str, question: str, history: list = None, db=None):
+    async def chat_with_doc_stream(self, file_path: str, public_id: str, question: str, history: list = None, db=None, web_search: bool = False):
         """Contextual chat within a local document using streaming."""
         text_context = await self._get_local_text(file_path, public_id, db=db)
         if "ERROR_" in text_context:
             yield text_context
+            return
+
+        if web_search:
+            formatted_history = ""
+            if history:
+                for h in history:
+                    role = "AI" if h.get("role") in ["ai", "assistant", "model", "bot"] else "User"
+                    text = h.get("text", "")
+                    if not text and "parts" in h:
+                        text = h["parts"][0].get("text", "")
+                    formatted_history += f"{role}: {text}\n"
+
+            prompt = f"""
+            You are a legal assistant specializing in Indian law. Answer the user's question based on the document text provided below and Google Search results.
+            We need to find similar cases, precedents, or landmark judgments relevant to this document and the user's question.
+            
+            Document Text:
+            {text_context[:3000]}
+            
+            Chat History:
+            {formatted_history}
+            
+            User Question: {question}
+            Answer:"""
+            async for chunk in self._gemini_search_stream(prompt):
+                yield chunk
             return
 
         similar_cases_context = ""
@@ -380,8 +417,85 @@ Instructions: Answer the user's question comprehensively. Use the provided conte
         async for chunk in self._call_llama_server_stream(prompt):
             yield chunk
 
+    async def _gemini_search_stream(self, prompt: str):
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            yield "Error: GEMINI_API_KEY is not set."
+            return
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent?key={api_key}&alt=sse"
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {"text": prompt}
+                    ]
+                }
+            ],
+            "tools": [
+                {
+                    "google_search": {}
+                }
+            ]
+        }
+
+        # Debug logging
+        debug_path = "ai_debug.log"
+        with open(debug_path, "a", encoding="utf-8") as f:
+            f.write(f"\n\n--- GEMINI STREAM START ---\n")
+            f.write(f"PROMPT: {prompt[:500]}...\n")
+            f.flush()
+
+        grounding_chunks = []
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                async with client.stream("POST", url, json=payload) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if line.startswith("data: "):
+                            try:
+                                chunk_data = json.loads(line[6:])
+                                if "candidates" in chunk_data and len(chunk_data["candidates"]) > 0:
+                                    candidate = chunk_data["candidates"][0]
+                                    
+                                    # Extract generated text
+                                    if "content" in candidate and "parts" in candidate["content"]:
+                                        for part in candidate["content"]["parts"]:
+                                            if "text" in part:
+                                                yield part["text"]
+                                                
+                                    # Extract grounding metadata
+                                    if "groundingMetadata" in candidate:
+                                        metadata = candidate["groundingMetadata"]
+                                        if "groundingChunks" in metadata:
+                                            for chunk in metadata["groundingChunks"]:
+                                                if "web" in chunk:
+                                                    uri = chunk["web"].get("uri")
+                                                    title = chunk["web"].get("title")
+                                                    if uri and uri not in [c[0] for c in grounding_chunks]:
+                                                        grounding_chunks.append((uri, title or "Web Source"))
+                            except Exception as parse_err:
+                                print(f"[LexNet] SSE parse error: {parse_err}")
+                                continue
+        except Exception as e:
+            with open(debug_path, "a", encoding="utf-8") as f:
+                f.write(f"GEMINI STREAM ERROR: {str(e)}\n")
+                f.flush()
+            yield f"\nERROR: {str(e)}"
+            return
+
+        if grounding_chunks:
+            yield "\n\n---\n#### 🌐 Google Search Precedents & Sources:\n"
+            for uri, title in grounding_chunks[:5]:
+                yield f"- [{title}]({uri})\n"
+                
+        with open(debug_path, "a", encoding="utf-8") as f:
+            f.write("--- GEMINI STREAM DONE ---\n")
+            f.flush()
+
     async def get_similar_cases(self, file_path: str, public_id: str, document_type: str, force: bool = False, db=None) -> list:
-        """Fetch cached similar cases or generate them using AI-designed regex patterns and web search."""
+        """Fetch cached similar cases or generate them using Google Search via Gemini 2.5 Flash Lite."""
         import re
         # 1. Try to fetch from DB first
         ledger_doc = None
@@ -402,169 +516,86 @@ Instructions: Answer the user's question comprehensively. Use the provided conte
         if "ERROR_" in text_context:
             return []
 
-        # 3. Dynamic search blueprint via AI
-        blueprint_prompt = f"""
-        You are an expert Indian legal advisor. We need to find similar cases, precedents, or landmark judgments for a document of type '{document_type}'.
-        Here is a portion of the document content:
-        ---
-        {text_context[:4000]}
-        ---
-        
-        Analyze this text and generate up to 3 web search strategies. Each strategy must contain:
-        1. A regular expression pattern with named capture groups to extract specific entities (like acts, sections, parties, or clauses) from the document text.
-        2. A search query template that uses those capture group names as placeholders (e.g., "similar cases section {{section}} of {{act}} India").
-        3. A fallback search query in case the regular expression doesn't match anything.
-        
-        Examples of strategies:
-        - Regex: "(?i)(?:section|sec\\\\.?)\\\\s*(?P<section>\\\\d+\\\\w*)\\\\s*(?:of|,\\\\s*)\\\\s*(?:the\\\\s+)?(?P<act>[A-Z][a-zA-Z\\\\s]+Act)"
-          Template: "landmark case laws under Section {{section}} of {{act}} India"
-          Fallback: "landmark legal cases for {document_type} India"
-          
-        - Regex: "(?i)(?P<party1>[A-Z][a-zA-Z\\\\s]+)\\\\s+v(?:s)?\\\\.\\\\s+(?P<party2>[A-Z][a-zA-Z\\\\s]+)"
-          Template: "similar judgments to {{party1}} vs {{party2}} India"
-          Fallback: "dispute precedent cases {document_type} India"
-
-        Return ONLY a JSON object with this exact schema:
-        {{
-            "strategies": [
-                {{
-                    "regex": "...",
-                    "template": "...",
-                    "fallback": "..."
-                }}
-            ]
-        }}
-        Ensure the regex strings are valid python regular expressions with properly escaped backslashes for JSON.
-        """
-        
-        strategies = []
-        try:
-            raw_blueprint = await self._call_llama_server(blueprint_prompt, json_format=True)
-            json_match = re.search(r'(\{.*\})', raw_blueprint, re.DOTALL)
-            if json_match:
-                raw_blueprint = json_match.group(1)
-            blueprint_data = json.loads(raw_blueprint)
-            strategies = blueprint_data.get("strategies", [])
-        except Exception as e:
-            print(f"[LexNet] Blueprint generation failed: {e}")
-
-        if not strategies:
-            strategies = [
-                {
-                    "regex": r"(?i)(?:section|sec\.?)\s*(?P<section>\d+\w*)",
-                    "template": f"precedents under Section {{section}} of {document_type} India",
-                    "fallback": f"similar legal cases for {document_type} India"
-                }
-            ]
-
-        # 4. Apply regex matching to compile queries
-        queries = []
-        for strategy in strategies:
-            regex_str = strategy.get("regex")
-            template_str = strategy.get("template")
-            fallback_str = strategy.get("fallback")
-            
-            try:
-                pattern = re.compile(regex_str)
-                match = pattern.search(text_context)
-                if match:
-                    group_data = match.groupdict()
-                    formatted_query = template_str
-                    for k, v in group_data.items():
-                        if v:
-                            formatted_query = formatted_query.replace(f"{{{k}}}", v).replace(f"{{{{{k}}}}}", v)
-                    queries.append(formatted_query)
-                else:
-                    queries.append(fallback_str)
-            except Exception as e:
-                print(f"[LexNet] Strategy execution failed for regex '{regex_str}': {e}")
-                queries.append(fallback_str)
-
-        # De-duplicate queries
-        queries = list(set([q for q in queries if q]))[:3]
-        print(f"[LexNet] Generated search queries: {queries}")
-
-        # 5. Execute Web Search using DuckDuckGo
-        search_results = []
-        try:
-            from duckduckgo_search import DDGS
-            with DDGS() as ddgs:
-                for q in queries:
-                    print(f"[LexNet] Searching DDG for: {q}")
-                    results = list(ddgs.text(q, max_results=3))
-                    for r in results:
-                        search_results.append({
-                            "title": r.get("title", ""),
-                            "link": r.get("href", ""),
-                            "snippet": r.get("body", "")
-                        })
-        except Exception as e:
-            print(f"[LexNet] Web search failed: {e}")
-
-        if not search_results:
-            print("[LexNet] No search results found from web.")
+        # Use Gemini 2.5 Flash Lite with Google Search tool to fetch similar cases
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            print("[LexNet] GEMINI_API_KEY not found in env, falling back to empty cases.")
             return []
 
-        # 6. Shorten and structure the results via AI
-        shorten_prompt = f"""
-        You are an expert legal annotator. We found these web search results for similar cases/precedents related to a legal document of type '{document_type}':
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={api_key}"
+        prompt = f"""
+        Search Google for landmark legal cases, precedents, or landlord-tenant disputes in India (such as subletting without consent, eviction, or notice periods) relevant to this {document_type} content:
+        ---
+        {text_context[:3000]}
+        ---
         
-        Results:
-        {json.dumps(search_results[:6], indent=2)}
-        
-        Summarize these results into a beautiful list of similar cases.
-        For each case, provide:
-        - title: Precise name of the case (e.g. "Mohori Bibee v. Dharmodas Ghose")
-        - link: The exact direct URL from the search results
-        - summary: A crisp 2-3 sentence summary of the case facts, the legal issue, and what was decided, explaining why it is relevant to a '{document_type}'.
-        
-        Return ONLY a JSON object with this structure:
+        Identify 3 relevant cases.
+        Return your response ONLY as a valid JSON object with this exact structure:
         {{
             "similar_cases": [
                 {{
-                    "title": "...",
-                    "link": "...",
-                    "summary": "..."
+                    "title": "Precise name of the case (e.g. Mohori Bibee v. Dharmodas Ghose)",
+                    "link": "The exact direct URL of the case or article from the search results",
+                    "summary": "A 2-3 sentence summary of the case facts, legal issue, and what was decided."
                 }}
             ]
         }}
+        Do not include any markdown styling like ```json. Just raw JSON.
         """
-
-        similar_cases = []
-        try:
-            raw_shortened = await self._call_llama_server(shorten_prompt, json_format=True)
-            json_match = re.search(r'(\{.*\})', raw_shortened, re.DOTALL)
-            if json_match:
-                raw_shortened = json_match.group(1)
-            shortened_data = json.loads(raw_shortened)
-            similar_cases = shortened_data.get("similar_cases", [])
-        except Exception as e:
-            print(f"[LexNet] Shortening of search results failed: {e}")
-            similar_cases = [
+        
+        payload = {
+            "contents": [
                 {
-                    "title": r["title"],
-                    "link": r["link"],
-                    "summary": r["snippet"][:200] + "..."
-                } for r in search_results[:3]
+                    "parts": [
+                        {"text": prompt}
+                    ]
+                }
+            ],
+            "tools": [
+                {
+                    "google_search": {}
+                }
             ]
+        }
 
-        # 7. Persist similar_cases back to DB
-        if db and ledger_doc and similar_cases:
-            print(f"[LexNet] Saving similar cases to DB for {public_id}")
-            if ledger_doc.analysis:
-                analysis_dict = dict(ledger_doc.analysis.analysis_data or {})
-                analysis_dict["similar_cases"] = similar_cases
-                ledger_doc.analysis.analysis_data = analysis_dict
-            else:
-                analysis_dict = {**self.ANALYSIS_SCHEMA, "similar_cases": similar_cases}
-                new_analysis = DocumentAnalysis(
-                    document_id=ledger_doc.id,
-                    analysis_data=analysis_dict
-                )
-                db.add(new_analysis)
-            await db.commit()
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, json=payload)
+                if response.status_code == 200:
+                    data = response.json()
+                    raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                    
+                    # Robust JSON extraction
+                    json_match = re.search(r'(\{.*\})', raw_text, re.DOTALL)
+                    if json_match:
+                        raw_text = json_match.group(1)
+                    
+                    parsed = json.loads(raw_text)
+                    similar_cases = parsed.get("similar_cases", [])
+                    
+                    # 7. Persist similar_cases back to DB
+                    if db and ledger_doc and similar_cases:
+                        print(f"[LexNet] Saving similar cases to DB for {public_id}")
+                        if ledger_doc.analysis:
+                            analysis_dict = dict(ledger_doc.analysis.analysis_data or {})
+                            analysis_dict["similar_cases"] = similar_cases
+                            ledger_doc.analysis.analysis_data = analysis_dict
+                        else:
+                            analysis_dict = {**self.ANALYSIS_SCHEMA, "similar_cases": similar_cases}
+                            new_analysis = DocumentAnalysis(
+                                document_id=ledger_doc.id,
+                                analysis_data=analysis_dict
+                            )
+                            db.add(new_analysis)
+                        await db.commit()
+                        
+                    return similar_cases
+                else:
+                    print(f"[LexNet] Gemini similar cases API call failed: {response.text}")
+        except Exception as e:
+            print(f"[LexNet] Gemini similar cases exception: {e}")
 
-        return similar_cases
+        return []
 
     async def explain_jargon_stream(self, text: str):
         """Simplifies legal jargon."""

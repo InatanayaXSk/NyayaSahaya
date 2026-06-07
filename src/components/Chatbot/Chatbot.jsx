@@ -19,6 +19,7 @@ function Chatbot() {
   const [similarCases, setSimilarCases] = useState([]);
   const [loadingCases, setLoadingCases] = useState(false);
   const [showCases, setShowCases] = useState(false);
+  const [webSearch, setWebSearch] = useState(false);
 
   const fetchSimilarCases = async (force = false) => {
     if (!activeDocument) return;
@@ -70,6 +71,7 @@ function Chatbot() {
         
         const payload = { 
           question: currentInput,
+          web_search: webSearch,
           history: messages.slice(-6).map(m => ({
             role: m.sender === 'user' ? 'user' : 'assistant',
             text: m.text
@@ -308,7 +310,18 @@ function Chatbot() {
                             ol: ({children}) => <ol className="list-decimal ml-4 mb-3 space-y-1">{children}</ol>,
                             li: ({children}) => <li className="pl-1">{children}</li>,
                             strong: ({children}) => <strong className="text-primary font-black">{children}</strong>,
-                            code: ({children}) => <code className="bg-black/30 px-1.5 py-0.5 rounded text-primary font-mono text-[10px]">{children}</code>
+                            code: ({children}) => <code className="bg-black/30 px-1.5 py-0.5 rounded text-primary font-mono text-[10px]">{children}</code>,
+                            a: ({href, children}) => (
+                              <a 
+                                href={href} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="inline-flex items-center gap-0.5 text-primary hover:underline font-bold transition-all"
+                              >
+                                {children}
+                                <span className="material-symbols-outlined text-[10px]">open_in_new</span>
+                              </a>
+                            )
                           }}
                         >
                           {msg.text.replace(/<thought>[\s\S]*?<\/thought>/g, '').trim()}
@@ -324,14 +337,36 @@ function Chatbot() {
         {isThinking && (
            <div className="flex items-center gap-2 px-4 py-3 bg-surface/80 backdrop-blur-md border border-border rounded-2xl rounded-tl-sm w-fit animate-in fade-in slide-in-from-bottom-2">
               <span className="material-symbols-outlined text-sm text-primary animate-spin">sync</span>
-              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-text-muted animate-pulse">Scanning DB...</span>
+              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-text-muted animate-pulse">
+                {webSearch ? 'Searching Google & Grounding...' : 'Scanning DB...'}
+              </span>
            </div>
         )}
         <div ref={chatEndRef} />
       </div>
 
       {/* Input */}
-      <div className="p-4 border-t border-border bg-background/80 backdrop-blur-xl">
+      <div className="p-4 border-t border-border bg-background/80 backdrop-blur-xl flex flex-col gap-2.5">
+        {/* Toggle Bar */}
+        <div className="flex items-center justify-between px-1 select-none">
+          <button
+            onClick={() => setWebSearch(!webSearch)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all duration-300 ${
+              webSearch 
+                ? 'bg-primary/10 border-primary/40 text-primary shadow-[0_0_12px_rgba(20,184,166,0.15)] hover:bg-primary/20' 
+                : 'bg-surface/40 border-border/80 text-text-muted hover:text-text-base hover:bg-surface/80'
+            }`}
+          >
+            <span className={`material-symbols-outlined text-[12px] ${webSearch ? 'animate-pulse' : ''}`}>language</span>
+            <span>Google Search</span>
+          </button>
+          {webSearch && (
+            <span className="text-[8px] font-black text-primary uppercase tracking-widest animate-pulse">
+              Search Grounding Active
+            </span>
+          )}
+        </div>
+
         <div className="relative">
           <input
             type="text"

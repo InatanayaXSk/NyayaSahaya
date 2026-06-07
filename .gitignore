@@ -36,3 +36,5 @@ backend/lexnet.db
 backend/storage
 ## hardware venv
 lexnet_hardware/.venv
+/r_paper/
+/r_paper.zip
