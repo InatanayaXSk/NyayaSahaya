@@ -20,10 +20,12 @@ function Chatbot() {
   const [loadingCases, setLoadingCases] = useState(false);
   const [showCases, setShowCases] = useState(false);
   const [webSearch, setWebSearch] = useState(false);
+  const [casesError, setCasesError] = useState(null);
 
   const fetchSimilarCases = async (force = false) => {
     if (!activeDocument) return;
     setLoadingCases(true);
+    setCasesError(null);
     try {
       const url = `${BASE_URL}/api/documents/similar-cases?public_id=${encodeURIComponent(activeDocument.public_id)}${force ? '&force=true' : ''}`;
       const response = await fetch(url, {
@@ -31,15 +33,21 @@ function Chatbot() {
           "Authorization": `Bearer ${token}`
         }
       });
-      if (!response.ok) throw new Error("Precedents scan failed");
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || "Precedents scan failed");
+      }
       const data = await response.json();
       setSimilarCases(data.similar_cases || []);
     } catch (err) {
       console.error("Failed to fetch similar cases:", err);
+      setCasesError(err.message);
+      setShowCases(true);
     } finally {
       setLoadingCases(false);
     }
   };
+
 
   useEffect(() => {
     if (activeDocument && useContext) {
@@ -182,18 +190,27 @@ function Chatbot() {
             className="flex items-center justify-between p-3 cursor-pointer hover:bg-surface/50 transition-all select-none"
           >
             <div className="flex items-center gap-2">
-              <span className={`material-symbols-outlined text-sm ${loadingCases ? 'animate-spin text-primary' : 'text-rose-500'}`}>
-                {loadingCases ? 'sync' : 'travel_explore'}
+              <span className={`material-symbols-outlined text-sm ${
+                loadingCases ? 'animate-spin text-primary' : casesError ? 'text-rose-500 animate-pulse' : 'text-rose-500'
+              }`}>
+                {loadingCases ? 'sync' : casesError ? 'error' : 'travel_explore'}
               </span>
               <span className="text-[9px] font-black uppercase tracking-[0.2em] text-text-muted">
-                {loadingCases ? 'Scanning Precedents from Web...' : `Web Precedents (${similarCases.length})`}
+                {loadingCases 
+                  ? 'Scanning Precedents from Web...' 
+                  : casesError 
+                    ? 'Precedent Scan Failed' 
+                    : `Web Precedents (${similarCases.length})`}
               </span>
-              {!loadingCases && similarCases.length > 0 && (
+              {!loadingCases && similarCases.length > 0 && !casesError && (
                 <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.6)]"></span>
+              )}
+              {!loadingCases && casesError && (
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping absolute ml-2 opacity-75"></span>
               )}
             </div>
             <div className="flex items-center gap-2">
-              {similarCases.length > 0 && (
+              {(similarCases.length > 0 || casesError) && (
                 <button 
                   onClick={(e) => {
                     e.stopPropagation();
@@ -203,7 +220,7 @@ function Chatbot() {
                   className="p-1 rounded hover:bg-primary/10 text-text-muted hover:text-primary transition-all flex items-center"
                   title="Force re-scan precedents"
                 >
-                  <span className="material-symbols-outlined text-[14px]">refresh</span>
+                  <span className={`material-symbols-outlined text-[14px] ${loadingCases ? 'animate-spin' : ''}`}>refresh</span>
                 </button>
               )}
               <span className="material-symbols-outlined text-text-muted text-sm transform transition-transform duration-300">
@@ -214,7 +231,19 @@ function Chatbot() {
 
           {showCases && (
             <div className="p-4 pt-1 border-t border-border/40 bg-background/40 max-h-[220px] overflow-y-auto custom-scrollbar space-y-3 animate-in slide-in-from-top-1 duration-200">
-              {loadingCases && similarCases.length === 0 ? (
+              {casesError ? (
+                <div className="flex flex-col items-center justify-center py-5 px-3 text-center border border-rose-500/30 bg-rose-500/5 rounded-xl">
+                  <span className="material-symbols-outlined text-rose-500 text-2xl mb-1.5 animate-bounce">error</span>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-rose-500">Scan Failed</p>
+                  <p className="text-[10px] font-medium text-text-muted mt-1 mb-3">{casesError}</p>
+                  <button
+                    onClick={() => fetchSimilarCases(true)}
+                    className="px-3 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 text-[8px] font-black uppercase tracking-widest transition-all"
+                  >
+                    Retry Scan
+                  </button>
+                </div>
+              ) : loadingCases && similarCases.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-6 text-center">
                   <div className="w-6 h-6 border-2 border-rose-500/20 border-t-rose-500 rounded-full animate-spin mb-2"></div>
                   <p className="text-[8px] font-black uppercase tracking-widest text-text-muted">Analyzing context & scanning web...</p>

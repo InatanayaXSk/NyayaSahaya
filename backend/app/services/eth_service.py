@@ -99,6 +99,18 @@ class EthService:
         # Max fee should be (base_fee * 1.5) + priority_fee
         max_fee = int(base_fee * 1.5) + priority_fee
 
+        # Estimate gas dynamically
+        try:
+            estimated_gas = self._contract.functions.verifyFile(
+                file_hash_bytes,
+                rpi_signature,
+            ).estimate_gas({"from": self._account.address})
+            gas_limit = int(estimated_gas * 1.3)  # Add 30% safety buffer
+            print(f"[EthService] Estimated gas: {estimated_gas}, setting limit to {gas_limit}")
+        except Exception as e:
+            print(f"[EthService] Gas estimation failed: {e}. Falling back to 300,000")
+            gas_limit = 300_000
+
         tx = self._contract.functions.verifyFile(
             file_hash_bytes,
             rpi_signature,
@@ -106,7 +118,7 @@ class EthService:
             "chainId": SEPOLIA_CHAIN_ID,
             "from": self._account.address,
             "nonce": nonce,
-            "gas": 200_000,
+            "gas": gas_limit,
             "maxFeePerGas": max_fee,
             "maxPriorityFeePerGas": priority_fee,
         })
@@ -146,6 +158,24 @@ class EthService:
         """Return the wallet address used for signing."""
         self._ensure_connected()
         return self._account.address
+
+
+    def check_transaction_status(self, tx_hash_hex: str) -> Optional[bool]:
+        """
+        Check if a transaction has been mined and whether it succeeded.
+        Returns:
+            True if the transaction succeeded.
+            False if the transaction reverted.
+            None if the transaction is still pending/not found.
+        """
+        self._ensure_connected()
+        try:
+            receipt = self._w3.eth.get_transaction_receipt(tx_hash_hex)
+            if receipt is not None:
+                return receipt.status == 1
+        except Exception as e:
+            print(f"[EthService] Error checking tx status for {tx_hash_hex}: {e}")
+        return None
 
 
 # Module-level singleton

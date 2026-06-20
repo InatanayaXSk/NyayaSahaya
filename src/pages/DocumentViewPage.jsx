@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useClient } from '../context/ClientContext';
 import { mapUserName } from '../utils/userMapping';
 import HardwareAuthModal from '../components/hardware/HardwareAuthModal';
 
@@ -11,6 +12,7 @@ export default function DocumentViewPage() {
     const { id } = useParams();
     const navigate = useNavigate();
     const { token, user } = useAuth();
+    const { setActiveDocument } = useClient();
 
     const [doc, setDoc] = useState(null);
     const [pdfUrl, setPdfUrl] = useState(null);
@@ -37,6 +39,7 @@ export default function DocumentViewPage() {
             if (!res.ok) throw new Error("Document not found or access denied");
             const data = await res.json();
             setDoc(data);
+            setActiveDocument(data); // Set active document for the chatbot
         } catch (err) {
             setError(err.message);
         } finally {
@@ -97,10 +100,14 @@ export default function DocumentViewPage() {
             fetchHardwareStatus();
             
             const interval = setInterval(fetchHardwareStatus, 30000);
-            return () => clearInterval(interval);
+            return () => {
+                clearInterval(interval);
+                setActiveDocument(null);
+            };
         }
         return () => {
             if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+            setActiveDocument(null);
         };
     }, [token, id]);
 
@@ -187,6 +194,7 @@ export default function DocumentViewPage() {
     if (!doc) return null;
 
     const isSealed = doc.sealed || (chainStatus && chainStatus.sealed);
+    const isPending = isSealing || (chainStatus && chainStatus.tx_status === 'pending');
 
     return (
         <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-8 h-[calc(100vh-64px)] flex flex-col bg-background text-text-base">
@@ -269,7 +277,7 @@ export default function DocumentViewPage() {
                             <p className="font-mono text-[10px] break-all text-text-base leading-relaxed">{doc.content_hash}</p>
                         </div>
 
-                        {isSealing ? (
+                        {isPending ? (
                             <div className="bg-primary/5 border border-primary/20 rounded-2xl p-8 text-center animate-pulse flex-1 flex flex-col items-center justify-center">
                                 <span className="material-symbols-outlined text-primary text-4xl mb-4 animate-spin">data_usage</span>
                                 <p className="font-black uppercase tracking-widest text-primary text-xs">Broadcasting Sequence...</p>
@@ -311,6 +319,22 @@ export default function DocumentViewPage() {
                             </div>
                         ) : (
                             <div className="bg-background/50 border border-border border-dashed rounded-2xl p-6 text-center flex-1 flex flex-col items-center justify-center">
+                                {chainStatus?.tx_status === 'failed' && (
+                                    <div className="w-full mb-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-[9px] font-black uppercase tracking-widest text-center flex flex-col items-center gap-2">
+                                        <span className="material-symbols-outlined text-sm">warning</span>
+                                        <span>Last Sealing Cycle Failed (Tx Reverted / Out of Gas)</span>
+                                        {chainStatus.tx_hash && (
+                                            <a 
+                                                href={`https://sepolia.etherscan.io/tx/${chainStatus.tx_hash}`} 
+                                                target="_blank" 
+                                                rel="noreferrer"
+                                                className="underline hover:text-rose-400 font-mono text-[8px] break-all block mt-1"
+                                            >
+                                                Inspect failed hash: {chainStatus.tx_hash.slice(0, 10)}...{chainStatus.tx_hash.slice(-10)}
+                                            </a>
+                                        )}
+                                    </div>
+                                )}
                                 <span className={`material-symbols-outlined ${isHardwareOnline ? 'text-text-muted' : 'text-rose-500 animate-pulse'} text-4xl mb-4`}>
                                     {isHardwareOnline ? 'lock_open' : 'cloud_off'}
                                 </span>

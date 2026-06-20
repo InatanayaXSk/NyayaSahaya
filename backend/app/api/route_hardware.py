@@ -138,7 +138,15 @@ async def verify_on_chain(
         raise HTTPException(status_code=403, detail="Access denied")
 
     if doc.eth_tx_hash:
-        raise HTTPException(status_code=409, detail="Already sealed")
+        tx_status = eth_service.check_transaction_status(doc.eth_tx_hash)
+        if tx_status is True:
+            raise HTTPException(status_code=409, detail="Already sealed")
+        elif tx_status is False:
+            # Previous transaction failed/reverted. Clear it and allow retry.
+            doc.eth_tx_hash = None
+            await db.commit()
+        else:
+            raise HTTPException(status_code=409, detail="A transaction is already pending on-chain")
 
     # Dual-Authorization Logic
     # We need a lawyer and a client.
@@ -199,9 +207,26 @@ async def chain_status(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
+    tx_status = None
+    if doc.eth_tx_hash:
+        try:
+            tx_status = eth_service.check_transaction_status(doc.eth_tx_hash)
+        except Exception as e:
+            print(f"Error checking transaction status: {e}")
+
+    tx_status_str = "none"
+    if doc.eth_tx_hash:
+        if tx_status is True:
+            tx_status_str = "success"
+        elif tx_status is False:
+            tx_status_str = "failed"
+        else:
+            tx_status_str = "pending"
+
     return {
-        "sealed": bool(doc.eth_tx_hash),
+        "sealed": tx_status_str == "success",
         "tx_hash": doc.eth_tx_hash,
+        "tx_status": tx_status_str,
         "etherscan_url": f"https://sepolia.etherscan.io/tx/{doc.eth_tx_hash}" if doc.eth_tx_hash else None,
     }
 

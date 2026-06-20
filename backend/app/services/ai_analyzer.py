@@ -517,11 +517,11 @@ Instructions: Answer the user's question comprehensively. Use the provided conte
             return []
 
         # Use Gemini 2.5 Flash Lite with Google Search tool to fetch similar cases
+        # Use Gemini 2.5 Flash Lite with Google Search tool to fetch similar cases
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            print("[LexNet] GEMINI_API_KEY not found in env, falling back to empty cases.")
-            return []
-
+            raise ValueError("GEMINI_API_KEY is not configured in backend/.env")
+ 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={api_key}"
         prompt = f"""
         Search Google for landmark legal cases, precedents, or landlord-tenant disputes in India (such as subletting without consent, eviction, or notice periods) relevant to this {document_type} content:
@@ -557,7 +557,7 @@ Instructions: Answer the user's question comprehensively. Use the provided conte
                 }
             ]
         }
-
+ 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(url, json=payload)
@@ -591,11 +591,11 @@ Instructions: Answer the user's question comprehensively. Use the provided conte
                         
                     return similar_cases
                 else:
-                    print(f"[LexNet] Gemini similar cases API call failed: {response.text}")
+                    raise RuntimeError(f"Gemini API error (Status {response.status_code}): {response.text}")
         except Exception as e:
             print(f"[LexNet] Gemini similar cases exception: {e}")
+            raise e
 
-        return []
 
     async def explain_jargon_stream(self, text: str):
         """Simplifies legal jargon."""
