@@ -193,6 +193,7 @@ async def download_document(
     request: "Request",
     public_id: str,
     token: str = None,          # ?token=<jwt> — used when browser opens PDF directly
+    raw: bool = False,          # If True, return original unstamped bytes
     db: AsyncSession = Depends(get_db),
 ):
     """Securely download a PDF. Accepts JWT via Authorization header OR
@@ -252,11 +253,25 @@ async def download_document(
         except Exception as e:
             print(f"Error checking transaction status during download: {e}")
             
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename={public_id}"}
-    )
+    if raw:
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={public_id}"}
+        )
+    else:
+        from app.services.pdf_stamper import stamp_pdf_with_verification
+        try:
+            stamped_bytes = stamp_pdf_with_verification(pdf_bytes, doc)
+        except Exception as e:
+            print(f"Stamping error: {e}")
+            stamped_bytes = pdf_bytes
+
+        return Response(
+            content=stamped_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"inline; filename={public_id}"}
+        )
 
 
 @router.post("/documents/share")

@@ -32,7 +32,7 @@ export const ENDPOINTS = {
  */
 export function getDownloadUrl(publicId) {
     const token = localStorage.getItem('lexnet_token') || '';
-    return `${API_BASE}/download/${publicId}?token=${encodeURIComponent(token)}`;
+    return `${API_BASE}/download/${publicId}?token=${encodeURIComponent(token)}&raw=true`;
 }
 
 export default {
