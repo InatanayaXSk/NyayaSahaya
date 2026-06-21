@@ -25,7 +25,18 @@ export const ENDPOINTS = {
     }
 };
 
+/**
+ * Build an authenticated download URL for a document public_id.
+ * Appends ?token=<jwt> so browser <a href> and direct navigation work
+ * without needing an Authorization header.
+ */
+export function getDownloadUrl(publicId) {
+    const token = localStorage.getItem('lexnet_token') || '';
+    return `${API_BASE}/download/${publicId}?token=${encodeURIComponent(token)}`;
+}
+
 export default {
     API_BASE,
-    ENDPOINTS
+    ENDPOINTS,
+    getDownloadUrl
 };

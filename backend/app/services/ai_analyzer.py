@@ -218,6 +218,18 @@ class AIAnalyzer:
             print(f"[LexNet] PyMuPDF extraction failed: {e}")
             return ""
 
+    def _get_pymupdf_text_from_bytes(self, pdf_bytes: bytes) -> str:
+        """Fast and robust text extraction using PyMuPDF (fitz) from bytes."""
+        try:
+            text = ""
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            for page in doc:
+                text += page.get_text() or ""
+            return text.strip()
+        except Exception as e:
+            print(f"[LexNet] PyMuPDF bytes extraction failed: {e}")
+            return ""
+
     def _get_pypdf2_text(self, file_path: str) -> str:
         """Fast, lightweight text extraction from PDF using standard rules (no AI)."""
         try:
@@ -231,13 +243,23 @@ class AIAnalyzer:
             print(f"[LexNet] PyPDF2 extraction failed: {e}")
             return ""
 
-    async def _get_local_text(self, file_path: str, public_id: str, db=None) -> str:
+    def _get_pypdf2_text_from_bytes(self, pdf_bytes: bytes) -> str:
+        """Fast, lightweight text extraction from PDF using standard rules (no AI) from bytes."""
+        import io
+        try:
+            text = ""
+            reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
+            for page in reader.pages:
+                text += page.extract_text() or ""
+            return text.strip()
+        except Exception as e:
+            print(f"[LexNet] PyPDF2 bytes extraction failed: {e}")
+            return ""
+
+    async def _get_local_text(self, file_path: str, public_id: str, db=None, pdf_bytes: bytes = None) -> str:
         """Hierarchical text extraction: DB Cache -> PyMuPDF -> PyPDF2."""
         if public_id in self.file_cache:
             return self.file_cache[public_id]
-
-        if not os.path.exists(file_path):
-            return f"ERROR_FILE_NOT_FOUND: {file_path}"
 
         # 1. Check PostgreSQL Cache
         if db:
@@ -252,14 +274,35 @@ class AIAnalyzer:
                 return cached_text
             print(f"[LexNet] DB cache MISS or error state for {public_id}")
 
-        # 2. Try PyMuPDF (Primary/Fast & Robust)
-        print(f"[LexNet] Attempting PyMuPDF extraction for {public_id}...")
-        text = self._get_pymupdf_text(file_path)
+        # If pdf_bytes not provided but db is available, try to fetch pdf_bytes from db
+        if not pdf_bytes and db:
+            from sqlalchemy import select
+            stmt = select(DocumentLedger.pdf_data).where(DocumentLedger.public_id == public_id)
+            res = await db.execute(stmt)
+            pdf_bytes = res.scalar_one_or_none()
 
-        # 3. Fallback to PyPDF2 if PyMuPDF returned no text
-        if len(text.strip()) == 0:
-            print(f"[LexNet] PyMuPDF returned no text. Falling back to PyPDF2 for {public_id}...")
-            text = self._get_pypdf2_text(file_path)
+        if pdf_bytes:
+            # 2. Try PyMuPDF (Primary/Fast & Robust) from bytes
+            print(f"[LexNet] Attempting PyMuPDF extraction from bytes for {public_id}...")
+            text = self._get_pymupdf_text_from_bytes(pdf_bytes)
+
+            # 3. Fallback to PyPDF2 if PyMuPDF returned no text
+            if len(text.strip()) == 0:
+                print(f"[LexNet] PyMuPDF returned no text. Falling back to PyPDF2 from bytes for {public_id}...")
+                text = self._get_pypdf2_text_from_bytes(pdf_bytes)
+        else:
+            # Fallback to file path if bytes not found
+            if not os.path.exists(file_path):
+                return f"ERROR_FILE_NOT_FOUND: {file_path}"
+
+            # 2. Try PyMuPDF (Primary/Fast & Robust) from file path
+            print(f"[LexNet] Attempting PyMuPDF extraction from file for {public_id}...")
+            text = self._get_pymupdf_text(file_path)
+
+            # 3. Fallback to PyPDF2 if PyMuPDF returned no text
+            if len(text.strip()) == 0:
+                print(f"[LexNet] PyMuPDF returned no text. Falling back to PyPDF2 from file for {public_id}...")
+                text = self._get_pypdf2_text(file_path)
 
         text = text.strip()[:15000] # Limit context
 
@@ -315,7 +358,7 @@ Instructions: Answer the user's question comprehensively. Use the provided conte
         except Exception as e:
             yield f"Error: {e}"
 
-    async def analyze_document(self, file_path: str, public_id: str = "temp", db=None) -> dict:
+    async def analyze_document(self, file_path: str, public_id: str = "temp", db=None, pdf_bytes: bytes = None) -> dict:
         """Perform deep analysis on a local file, with persistence and smart re-analysis."""
         # 1. Check DB for already processed analysis
         ledger_doc = None
@@ -335,7 +378,7 @@ Instructions: Answer the user's question comprehensively. Use the provided conte
                 print(f"[LexNet] Cache exists but is INCOMPLETE (0 clauses or short summary). Re-analyzing {public_id}...")
 
         # 2. Extract text (uses text cache/PyPDF2 fallback)
-        text_context = await self._get_local_text(file_path, public_id, db=db)
+        text_context = await self._get_local_text(file_path, public_id, db=db, pdf_bytes=pdf_bytes)
         if "ERROR_" in text_context:
             return {"error": text_context}
 

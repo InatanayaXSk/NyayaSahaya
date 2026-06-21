@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, List
-from sqlalchemy import String, Boolean, DateTime, ForeignKey, Text, Table, Column, Enum as SQLEnum
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, Text, Table, Column, Enum as SQLEnum, LargeBinary
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
@@ -63,6 +63,9 @@ class DocumentLedger(Base):
     eth_tx_hash: Mapped[Optional[str]] = mapped_column(String(66))    # 0x + 64 hex chars
     eth_chain_id: Mapped[Optional[int]] = mapped_column(default=None)  # 11155111 for Sepolia
     sealed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # PDF binary data stored directly in PostgreSQL (BYTEA)
+    pdf_data: Mapped[Optional[bytes]] = mapped_column(LargeBinary, default=None)
 
     # Relationships
     owner: Mapped["User"] = relationship(back_populates="owned_documents")

@@ -18,6 +18,7 @@ class DocumentGenerateRequest(BaseModel):
     document_type: str  # "Sale Deed", "Will", "Power of Attorney"
     data: Dict[str, str]
     client_username: Optional[str] = None
+    custom_text: Optional[str] = None
 
 
 class DocumentGenerateResponse(BaseModel):

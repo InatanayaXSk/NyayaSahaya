@@ -5,7 +5,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from app.config import settings
 
-def generate_document_from_template(document_type: str, data: dict) -> BytesIO | None:
+def generate_document_from_template(document_type: str, data: dict, custom_text: str = None) -> BytesIO | None:
     """Generate a final PDF based on reference template and dynamic data."""
     pdf_output = BytesIO()
     
@@ -21,29 +21,32 @@ def generate_document_from_template(document_type: str, data: dict) -> BytesIO |
     y_pos -= 30
     c.setFont("Helvetica", 11)
 
-    # Resolve template path
-    # Frontend might send "Rental Agreement" but ID is "rental"
-    # Mapping name to file
-    mapping = {
-        "Rental Agreement": "Rental Agreement",
-        "Sale Deed": "Sale Deed",
-        "Will / Testament": "Will Deed",
-        "Power of Attorney": "Power of Attorney"
-    }
-    
-    file_name = mapping.get(document_type, document_type)
-    template_txt_path = os.path.join(settings.REFERENCE_DIR, f"{file_name}.txt")
-    
-    if not os.path.exists(template_txt_path):
-        print(f"Template not found: {template_txt_path}")
-        return None
+    if custom_text:
+        text = custom_text
+    else:
+        # Resolve template path
+        # Frontend might send "Rental Agreement" but ID is "rental"
+        # Mapping name to file
+        mapping = {
+            "Rental Agreement": "Rental Agreement",
+            "Sale Deed": "Sale Deed",
+            "Will / Testament": "Will Deed",
+            "Power of Attorney": "Power of Attorney"
+        }
+        
+        file_name = mapping.get(document_type, document_type)
+        template_txt_path = os.path.join(settings.REFERENCE_DIR, f"{file_name}.txt")
+        
+        if not os.path.exists(template_txt_path):
+            print(f"Template not found: {template_txt_path}")
+            return None
 
-    try:
-        with open(template_txt_path, 'r', encoding='utf-8') as file:
-            text = file.read()
-    except Exception as e:
-        print(f"Error reading template: {e}")
-        return None
+        try:
+            with open(template_txt_path, 'r', encoding='utf-8') as file:
+                text = file.read()
+        except Exception as e:
+            print(f"Error reading template: {e}")
+            return None
 
     # Dynamic Placeholder Replacement
     for placeholder, value in data.items():

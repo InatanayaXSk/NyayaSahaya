@@ -9,7 +9,6 @@ from app import schemas as s
 from app.models import DocumentLedger
 from app.database import get_db
 from app.services.crypto import software_sign_document, verify_signature
-from app.services.file_service import file_service
 
 router = APIRouter()
 

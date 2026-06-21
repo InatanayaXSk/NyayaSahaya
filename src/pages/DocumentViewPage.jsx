@@ -5,7 +5,8 @@ import { useClient } from '../context/ClientContext';
 import { mapUserName } from '../utils/userMapping';
 import HardwareAuthModal from '../components/hardware/HardwareAuthModal';
 
-import { API_BASE } from '../utils/api';
+import { API_BASE, getDownloadUrl } from '../utils/api';
+
 
 
 export default function DocumentViewPage() {
@@ -237,7 +238,7 @@ export default function DocumentViewPage() {
                             {doc.public_id}.pdf
                         </span>
                         <a 
-                            href={`${API_BASE}/download/${doc.public_id}`} 
+                            href={getDownloadUrl(doc.public_id)} 
                             className="text-[10px] font-black uppercase tracking-widest text-primary hover:underline flex items-center gap-1"
                         >
                             <span className="material-symbols-outlined text-[16px]">download</span> Download Asset

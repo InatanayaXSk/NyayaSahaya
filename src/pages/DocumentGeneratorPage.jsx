@@ -4,7 +4,8 @@ import DOMPurify from 'dompurify';
 import { useAuth } from '../context/AuthContext';
 import { useClient } from '../context/ClientContext';
 
-import { API_BASE } from '../utils/api';
+import { API_BASE, getDownloadUrl } from '../utils/api';
+
 
 
 /* ===================== Signature Drawing Pad ===================== */
@@ -313,8 +314,8 @@ export default function DocumentGeneratorPage() {
             const escapedPlaceholder = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             if (value) {
                 if (value.startsWith('data:image')) {
-                    // Render Signature Image
-                    updatedContent = updatedContent.replace(new RegExp(escapedPlaceholder, 'g'), `<img src="${value}" class="inline-block max-h-12 align-middle border-b border-primary/30" />`);
+                    // Render Signature Image with data-placeholder attribute for extraction later
+                    updatedContent = updatedContent.replace(new RegExp(escapedPlaceholder, 'g'), `<img src="${value}" data-placeholder="${placeholder}" class="inline-block max-h-12 align-middle border-b border-primary/30" />`);
                 } else {
                     updatedContent = updatedContent.replace(new RegExp(escapedPlaceholder, 'g'), `<span class="bg-primary/10 px-1 font-bold text-primary border border-primary/20 rounded-sm">${value}</span>`);
                 }
@@ -335,10 +336,31 @@ export default function DocumentGeneratorPage() {
         setIsGenerating(true);
         try {
             const templateName = templates.find(t => t.id === selectedTemplate)?.name || selectedTemplate;
+            
+            // Extract custom edited text from the editor container
+            let customText = undefined;
+            if (previewRef.current) {
+                const editableDiv = previewRef.current.querySelector('[contenteditable]');
+                if (editableDiv) {
+                    const clone = editableDiv.cloneNode(true);
+                    
+                    // Restore signature placeholders from data-placeholder attribute
+                    const imgs = clone.querySelectorAll('img[data-placeholder]');
+                    imgs.forEach(img => {
+                        const ph = img.getAttribute('data-placeholder');
+                        img.replaceWith(document.createTextNode(ph));
+                    });
+                    
+                    // innerText preserves standard layout and line breaks
+                    customText = clone.innerText || clone.textContent;
+                }
+            }
+
             const payload = {
                 document_type: templateName,
                 data: formData,
                 client_username: selectedClient || undefined,
+                custom_text: customText,
             };
             
             const response = await fetch(`${API_BASE}/generate-doc`, {
@@ -354,6 +376,7 @@ export default function DocumentGeneratorPage() {
             
             if (result.success) {
                 const prev = JSON.parse(localStorage.getItem('lexnet_doc_history') || '[]');
+                const downloadUrl = getDownloadUrl(result.public_id);
                 const entry = { 
                     template: selectedTemplate, 
                     title: templateName, 
@@ -361,11 +384,10 @@ export default function DocumentGeneratorPage() {
                     timestamp: Date.now(),
                     doc_hash: result.doc_hash,
                     public_id: result.public_id,
-                    download_url: result.cloudinary_url
+                    download_url: downloadUrl
                 };
                 localStorage.setItem('lexnet_doc_history', JSON.stringify([entry, ...prev].slice(0, 20)));
                 // Safe Anchor Download (to bypass Chrome 'Unsafe attempt' errors)
-                const downloadUrl = result.cloudinary_url;
                 setLastDownloadUrl(downloadUrl);
                 const link = document.createElement('a');
                 link.href = downloadUrl;

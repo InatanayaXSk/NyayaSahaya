@@ -17,7 +17,6 @@ from app.api.route_users import get_current_user
 from app.database import get_db
 from app.services.hardware_provider import hardware_provider
 from app.services.eth_service import eth_service
-from app.services.file_service import file_service
 
 router = APIRouter()
 

@@ -101,9 +101,7 @@ async def chat_document(request: dict, current_user: User = Depends(get_current_
          async def err_stream(): yield "Error: You are not authorized to chat with this document or it doesn't exist"
          return StreamingResponse(err_stream(), media_type="text/plain")
 
-    from app.services.file_service import file_service
-    file_path = file_service.get_file_path(public_id)
-    generator = ai_analyzer.chat_with_doc_stream(file_path, public_id, question, history, db=db, web_search=web_search)
+    generator = ai_analyzer.chat_with_doc_stream(file_path="", public_id=public_id, question=question, history=history, db=db, web_search=web_search)
     return StreamingResponse(generator, media_type="text/plain")
 
 @router.post("/analyze-doc")

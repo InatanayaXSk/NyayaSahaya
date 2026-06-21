@@ -24,12 +24,6 @@ app.add_middleware(
     allow_credentials=True,
 )
 
-# Mount Local Storage for PDF Retrieval
-if not os.path.exists(settings.STORAGE_DIR):
-    os.makedirs(settings.STORAGE_DIR)
-
-app.mount(settings.STATIC_FILES_URL, StaticFiles(directory=settings.STORAGE_DIR), name="storage")
-
 # Register API routers
 app.include_router(route_users.router, prefix="/api/users", tags=["Users"])
 app.include_router(route_chat.router, prefix="/api", tags=["Chat"])
