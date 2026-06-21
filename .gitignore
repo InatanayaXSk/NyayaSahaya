@@ -6,7 +6,6 @@
 .env.production.local
 backend/.env
 .antigravity*/
-
 # Dependencies
 node_modules/
 .venv/
@@ -24,6 +23,7 @@ Thumbs.db
 
 # Build and Logs
 dist/
+dist/index.html
 build/
 *.log
 backend/uvicorn_logs.txt

@@ -92,6 +92,16 @@ export default function GlassNav() {
                             <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-text-muted text-sm pointer-events-none">expand_more</span>
                         </div>
                     )}
+                    {/* Admin Settings — lawyers only */}
+                    {user?.role === 'lawyer' && (
+                        <Link
+                            to="/admin-settings"
+                            className={`p-2 hover:bg-primary/10 rounded-full transition-colors ${location.pathname === '/admin-settings' ? 'text-primary bg-primary/10' : 'text-text-muted'}`}
+                            title="Runtime Config"
+                        >
+                            <span className="material-symbols-outlined">tune</span>
+                        </Link>
+                    )}
                     {/* Dark Mode Toggle */}
                     <button
                         onClick={toggleDarkMode}
@@ -106,6 +116,7 @@ export default function GlassNav() {
                         <span className="material-symbols-outlined text-text-base">notifications</span>
                         <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full shadow-[0_0_8px_rgba(244,63,94,0.5)]"></span>
                     </button>
+
                     {/* Mobile menu toggle */}
                     <button
                         className="lg:hidden p-2 hover:bg-primary/10 rounded-full transition-colors"

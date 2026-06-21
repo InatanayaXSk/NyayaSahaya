@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Response, Depends, UploadFile, File
+from fastapi import APIRouter, HTTPException, Response, Depends, UploadFile, File, Request
 from fastapi.responses import FileResponse
 from typing import Optional
 import os
@@ -207,12 +207,42 @@ async def list_documents(
     return {"documents": documents}
     
 @router.get("/download/{public_id:path}")
-async def download_document(public_id: str, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Securely download a PDF with correct headers to prevent .html issues."""
+async def download_document(
+    request: "Request",
+    public_id: str,
+    token: str = None,          # ?token=<jwt> — used when browser opens PDF directly
+    db: AsyncSession = Depends(get_db),
+):
+    """Securely download a PDF. Accepts JWT via Authorization header OR
+    ?token=<jwt> query param so browsers can load PDFs without custom headers."""
+    from fastapi import Request as _Request
+    from jose import jwt as jose_jwt, JWTError
+    from app.config import settings as cfg
+
+    # Try to resolve user from Authorization header first, then fall back to ?token=
+    resolved_token = token
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        resolved_token = auth_header[7:]
+
+    current_user = None
+    if resolved_token:
+        try:
+            payload = jose_jwt.decode(resolved_token, cfg.SECRET_KEY, algorithms=[cfg.ALGORITHM])
+            username = payload.get("sub")
+            if username:
+                res = await db.execute(select(User).where(User.username == username))
+                current_user = res.scalar_one_or_none()
+        except (JWTError, Exception):
+            pass
+
+    if current_user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     # RBAC check
     stmt = select(DocumentLedger).where(
-        (DocumentLedger.public_id == public_id) & 
-        ((DocumentLedger.owner_username == current_user.username) | 
+        (DocumentLedger.public_id == public_id) &
+        ((DocumentLedger.owner_username == current_user.username) |
          (DocumentLedger.shared_with.any(User.username == current_user.username)))
     )
     result = await db.execute(stmt)

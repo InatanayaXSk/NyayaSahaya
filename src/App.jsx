@@ -9,6 +9,7 @@ import DocumentViewPage from './pages/DocumentViewPage';
 import BridgeMonitorPage from './pages/BridgeMonitorPage';
 import AuthPage from './pages/AuthPage';
 import VerifyPage from './pages/VerifyPage';
+import AdminSettingsPage from './pages/AdminSettingsPage';
 import { AuthProvider } from './context/AuthContext';
 import { ClientProvider } from './context/ClientContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
@@ -31,6 +32,7 @@ function App() {
               <Route path="/documents/:id" element={<ProtectedRoute><DocumentViewPage /></ProtectedRoute>} />
               <Route path="/bridge-monitor" element={<ProtectedRoute><BridgeMonitorPage /></ProtectedRoute>} />
               <Route path="/verify" element={<ProtectedRoute><VerifyPage /></ProtectedRoute>} />
+              <Route path="/admin-settings" element={<ProtectedRoute><AdminSettingsPage /></ProtectedRoute>} />
             </Routes>
           </Layout>
         </Router>

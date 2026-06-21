@@ -7,7 +7,7 @@ import os
 from .config import settings
 from .services.cloudinary_service import cloudinary_service
 from . import schemas as s
-from .api import route_chat, route_documents, route_hardware, route_crypto, route_ws, route_users, route_dashboard, route_templates
+from .api import route_chat, route_documents, route_hardware, route_crypto, route_ws, route_users, route_dashboard, route_templates, route_admin
 from .database import engine, Base
 
 app = FastAPI(
@@ -15,7 +15,9 @@ app = FastAPI(
     version=settings.VERSION,
 )
 
-# CORS — allow all origins for development
+# CORS — explicit origin list so allow_credentials=True is valid.
+# Wildcard "*" is incompatible with credentials; origins must be listed explicitly.
+# Add CORS_ORIGIN_VERCEL and CORS_ORIGIN_EXTRA to your Render env vars.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -33,6 +35,7 @@ app.include_router(route_crypto.router, prefix="/api", tags=["Crypto"])
 app.include_router(route_ws.router, tags=["WebSocket"])
 app.include_router(route_dashboard.router, prefix="/api", tags=["Dashboard"])
 app.include_router(route_templates.router, prefix="/api", tags=["Templates"])
+app.include_router(route_admin.router, prefix="/api", tags=["Admin"])
 
 
 @app.on_event("startup")
@@ -45,8 +48,9 @@ async def startup():
         await conn.run_sync(Base.metadata.create_all)
         # Add column if not exists
         await conn.execute(text("ALTER TABLE ledger ADD COLUMN IF NOT EXISTS sealed BOOLEAN DEFAULT FALSE"))
-    
+
     print(f"[LexNet] Database tables verified/created.")
+    print(f"[LexNet] CORS origins: {settings.CORS_ORIGINS}")
     print(f"[LexNet] {settings.PROJECT_NAME} v{settings.VERSION} started.")
 
 
@@ -58,4 +62,3 @@ async def health():
         "version": settings.VERSION,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
-
