@@ -1,11 +1,9 @@
- 
 GENERAL POWER OF ATTORNEY 
  
- 
-KNOW ALL MEN BY THESE PRESENTS THAT I, __________ S/o. / W/o. 
-aged ______ about years, residing at No.___________ do hereby nominate, 
-appoint constitute and appoint Sri./Smt______________________ S/o. /W/o. aged 
-about _____ years residing at ______________________as my true and lawful 
+KNOW ALL MEN BY THESE PRESENTS THAT I, (Principal Name) S/o. / W/o. (Principal Father Name)
+aged (Principal Age) years, residing at No. (Principal Address) do hereby nominate, 
+appoint constitute and appoint Sri./Smt. (Attorney Name) S/o. / W/o. (Attorney Father Name) aged 
+about (Attorney Age) years residing at (Attorney Address) as my true and lawful 
 power of attorney holder to do the following acts, deeds and things on my behalf 
 and in my name in respect of the schedule property. 
  
@@ -38,72 +36,39 @@ schedule property on my behalf.
  
 7. I have not given any power to this attorney holder to alienate property. 
  
-I h
-ereby agree to ratify and confirm all and what so ever that my said attorney 
+I hereby agree to ratify and confirm all and what so ever that my said attorney 
 shall lawfully do or cause to be done be virtue of this document. 
  
  
- 
- 
- 
-2
- 
 SCHEDULE 
  
-All the piece and parcel of immovable property bearing No.____________*  
-Measuring _______________ 
+All the piece and parcel of immovable property bearing No. (Property Number)  
+Measuring (Property Dimensions) 
  
 Bounded by:- 
  
+On the East: (Property Bounded East) 
  
+On the West: (Property Bounded West) 
  
-On the East 
+On the South: (Property Bounded South) 
  
-: 
+On the North: (Property Bounded North) 
  
- 
- 
-On the West  
-: 
- 
- 
- 
-On the South  
-: 
- 
- 
- 
-On the North  
-: 
- 
- 
-Stamp duty paid as per Article 41(f) of the Schedule to the Karnataka Stamp Act, 
-1957. 
+Stamp duty paid as per Article 41(f) of the Schedule to the Karnataka Stamp Act, 1957. 
  
 IN WITNESS WHEREOF I the executant above named has signed to this general 
-power of attorney on this ______day _________ month ________year. 
+power of attorney on this (Date) day (Month) month (Year) year. 
   
 WITNESS: 
  
+1. Sri. (Witness 1 Name)
+   Address: (Witness 1 Address)
+   Witness Signature: (Signature of Witness 1)
+
+2. Sri. (Witness 2 Name)
+   Address: (Witness 2 Address)
+   Witness Signature: (Signature of Witness 2)
  
  
- 
- 
- 
- 
- 
- 
- 
- 
- 
-EXECUTANT
- 
- 
- 
- 
-[*Full details of the property number such as Khata number, street/road with reference to the 
-local authority records and boundaries shall be furnished.. If the scheduled-A property is a Flat / 
-Apartment, details of the property on which the Flat / Apartment is constructed, flat number, 
-floor number, name of the apartment etc., full details of the schedule -A property so as to identify 
-shall be furnished.] 
- 
+EXECUTANT Signature: (Signature of the Executant)

@@ -34,7 +34,7 @@ def handle_general_responses(question: str, skip_legal_check: bool = False):
         },
         "identity": {
             "patterns": [r"\b(who\s+are\s+you|what\s+are\s+you)\b"],
-            "response": "I'm LexNet AI, a specialized legal assistant for Indian law powered by llama.cpp and the LexNet platform.",
+            "response": "I'm LexNet AI, a specialized legal assistant for Indian law powered by OpenRouter (Qwen-3 32B) and the LexNet platform.",
         },
         "capabilities": {
             "patterns": [r"\b(what\s+can\s+you\s+do|how\s+can\s+you\s+help)\b"],

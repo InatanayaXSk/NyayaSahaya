@@ -90,14 +90,15 @@ class EthService:
         # Convert hex string → bytes32
         file_hash_bytes = bytes.fromhex(file_hash_hex)
 
-        nonce = self._w3.eth.get_transaction_count(self._account.address)
+        # Use 'latest' nonce to avoid nonce gaps from stuck pending txs
+        nonce = self._w3.eth.get_transaction_count(self._account.address, 'latest')
 
         # Dynamic gas strategy (EIP-1559)
         base_fee = self._w3.eth.get_block("latest")["baseFeePerGas"]
-        # Recommend a slightly higher priority fee to ensure inclusion
-        priority_fee = self._w3.to_wei(3, "gwei") 
-        # Max fee should be (base_fee * 1.5) + priority_fee
-        max_fee = int(base_fee * 1.5) + priority_fee
+        # Use a generous priority fee to ensure quick inclusion
+        priority_fee = self._w3.to_wei(5, "gwei") 
+        # Max fee = 2x base + priority (generous buffer for testnet volatility)
+        max_fee = int(base_fee * 2) + priority_fee
 
         # Estimate gas dynamically
         try:
@@ -128,6 +129,43 @@ class EthService:
 
         print(f"[EthService] TX sent: {tx_hash.hex()}")
         return f"0x{tx_hash.hex()}"
+
+    def cancel_pending_nonces(self) -> list[str]:
+        """
+        Send zero-value self-transfer transactions to cancel all stuck
+        pending nonces. Returns list of cancellation tx hashes.
+        """
+        self._ensure_connected()
+
+        latest = self._w3.eth.get_transaction_count(self._account.address, 'latest')
+        pending = self._w3.eth.get_transaction_count(self._account.address, 'pending')
+
+        if pending <= latest:
+            print("[EthService] No stuck nonces to cancel.")
+            return []
+
+        cancelled = []
+        base_fee = self._w3.eth.get_block("latest")["baseFeePerGas"]
+        priority_fee = self._w3.to_wei(10, "gwei")  # High priority to replace stuck txs
+        max_fee = int(base_fee * 3) + priority_fee
+
+        for nonce in range(latest, pending):
+            tx = {
+                "chainId": SEPOLIA_CHAIN_ID,
+                "from": self._account.address,
+                "to": self._account.address,  # Self-transfer
+                "value": 0,
+                "nonce": nonce,
+                "gas": 21_000,
+                "maxFeePerGas": max_fee,
+                "maxPriorityFeePerGas": priority_fee,
+            }
+            signed = self._w3.eth.account.sign_transaction(tx, self._account.key)
+            tx_hash = self._w3.eth.send_raw_transaction(signed.raw_transaction)
+            print(f"[EthService] Cancelled nonce {nonce}: 0x{tx_hash.hex()}")
+            cancelled.append(f"0x{tx_hash.hex()}")
+
+        return cancelled
 
     def read_record(self, file_hash_hex: str) -> dict:
         """
@@ -169,10 +207,14 @@ class EthService:
             None if the transaction is still pending/not found.
         """
         self._ensure_connected()
+        from web3.exceptions import TransactionNotFound
         try:
             receipt = self._w3.eth.get_transaction_receipt(tx_hash_hex)
             if receipt is not None:
                 return receipt.status == 1
+        except TransactionNotFound:
+            # Transaction is still pending or not yet propagated (normal during polling)
+            return None
         except Exception as e:
             print(f"[EthService] Error checking tx status for {tx_hash_hex}: {e}")
         return None

@@ -14,7 +14,7 @@
     /* slate-200 - subtle for light mode */
     --color-text-base: 15 23 42;
     --color-text-muted: 100 116 139;
-    --color-primary: 187 189 246;
+    --color-primary: 150 71 196;
   }
 
   .dark {
@@ -29,7 +29,7 @@
     /* slate-200 */
     --color-text-muted: 71 85 105;
     /* slate-600 */
-    --color-primary: 187 189 246;
+    --color-primary: 150 71 196;
     color-scheme: dark;
   }
 

@@ -362,45 +362,43 @@ export default function DocumentViewPage() {
                     </div>
 
                     {/* Data Insulation / Access Control Panel */}
-                    {user?.role === 'client' && (
-                        <div className="bg-surface rounded-[2rem] border border-border shadow-sm p-8">
-                            <div className="flex items-center gap-4 mb-6">
-                                <div className="w-12 h-12 rounded-2xl bg-rose-500/10 flex items-center justify-center border border-rose-500/20">
-                                    <span className="material-symbols-outlined text-rose-500">shield_person</span>
-                                </div>
-                                <div>
-                                    <h2 className="text-xs font-black uppercase tracking-[0.2em] text-text-base">Asset Insulation</h2>
-                                    <p className="text-[10px] text-text-muted font-bold uppercase tracking-widest mt-1">Access Control Hub</p>
-                                </div>
+                    <div className="bg-surface rounded-[2rem] border border-border shadow-sm p-8">
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 flex items-center justify-center border border-rose-500/20">
+                                <span className="material-symbols-outlined text-rose-500">shield_person</span>
                             </div>
-
-                            <p className="text-[11px] text-text-muted mb-6 leading-relaxed font-medium uppercase tracking-tight italic">
-                                Document controlled by: <strong className="text-text-base">{doc.owner_full_name || mapUserName(doc.owner_username)}</strong>.
-                            </p>
-
-                            <form onSubmit={handleShare} className="flex flex-col gap-3">
-                                <input
-                                    type="text"
-                                    placeholder="Lawyer Username"
-                                    value={shareUsername}
-                                    onChange={e => setShareUsername(e.target.value)}
-                                    className="bg-background border border-border rounded-xl px-5 py-3 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                                    required
-                                />
-                                <button
-                                    type="submit"
-                                    className="bg-text-base text-background hover:bg-primary hover:text-slate-900 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all"
-                                >
-                                    Grant Access
-                                </button>
-                            </form>
-                            {shareMessage && (
-                                <p className={`mt-4 text-[10px] font-black uppercase tracking-widest text-center ${shareMessage.includes('❌') ? 'text-rose-500' : 'text-primary'}`}>
-                                    {shareMessage}
-                                </p>
-                            )}
+                            <div>
+                                <h2 className="text-xs font-black uppercase tracking-[0.2em] text-text-base">Asset Insulation</h2>
+                                <p className="text-[10px] text-text-muted font-bold uppercase tracking-widest mt-1">Access Control Hub</p>
+                            </div>
                         </div>
-                    )}
+
+                        <p className="text-[11px] text-text-muted mb-6 leading-relaxed font-medium uppercase tracking-tight italic">
+                            Document controlled by: <strong className="text-text-base">{doc.owner_full_name || mapUserName(doc.owner_username)}</strong>.
+                        </p>
+
+                        <form onSubmit={handleShare} className="flex flex-col gap-3">
+                            <input
+                                type="text"
+                                placeholder={user?.role === 'lawyer' ? "Client Username" : "Lawyer Username"}
+                                value={shareUsername}
+                                onChange={e => setShareUsername(e.target.value)}
+                                className="bg-background border border-border rounded-xl px-5 py-3 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                                required
+                            />
+                            <button
+                                type="submit"
+                                className="bg-text-base text-background hover:bg-primary hover:text-slate-900 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all"
+                            >
+                                Grant Access
+                            </button>
+                        </form>
+                        {shareMessage && (
+                            <p className={`mt-4 text-[10px] font-black uppercase tracking-widest text-center ${shareMessage.includes('❌') ? 'text-rose-500' : 'text-primary'}`}>
+                                {shareMessage}
+                            </p>
+                        )}
+                    </div>
 
                     {/* Event Timeline */}
                     <div className="bg-surface rounded-[2rem] border border-border shadow-sm p-8 flex-1 min-h-[300px]">

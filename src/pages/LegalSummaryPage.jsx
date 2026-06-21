@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useClient } from '../context/ClientContext';
 
 import { BASE_URL as API_BASE } from '../utils/api';
 
@@ -18,18 +19,20 @@ export default function LegalSummaryPage() {
     const [input, setInput] = useState('');
     const [isChatting, setIsChatting] = useState(false);
 
-    const { token } = useAuth();
+    const { token, user } = useAuth();
+    const { activeClient } = useClient();
 
     useEffect(() => {
         if (token) {
             fetchDocuments();
         }
-    }, [token]);
+    }, [token, activeClient, user]);
 
     const fetchDocuments = async () => {
         if (!token) return;
         try {
-            const resp = await fetch(`${API_BASE}/api/documents`, {
+            const clientQuery = (user?.role === 'lawyer' && activeClient) ? `?client=${encodeURIComponent(activeClient.username)}` : '';
+            const resp = await fetch(`${API_BASE}/api/documents${clientQuery}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }

@@ -62,6 +62,7 @@ class DocumentLedger(Base):
     # Ethereum Sepolia on-chain verification
     eth_tx_hash: Mapped[Optional[str]] = mapped_column(String(66))    # 0x + 64 hex chars
     eth_chain_id: Mapped[Optional[int]] = mapped_column(default=None)  # 11155111 for Sepolia
+    sealed: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Relationships
     owner: Mapped["User"] = relationship(back_populates="owned_documents")

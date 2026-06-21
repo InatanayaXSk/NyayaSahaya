@@ -15,6 +15,10 @@ class Settings:
 
     # Together AI (for chatbot)
     TOGETHER_API_KEY: str = os.getenv("TOGETHER_API_KEY", "")
+    
+    # OpenRouter API (for legal analyzer)
+    OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
+    OPENROUTER_MODEL: str = os.getenv("OPENROUTER_MODEL", "qwen/qwen3-32b")
 
     # FAISS
     FAISS_DB_PATH: str = os.getenv("FAISS_DB_PATH", "../NyayaSahaya-bot/ipc_embed_db")

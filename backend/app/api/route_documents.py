@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Response, Depends, UploadFile, File
 from fastapi.responses import FileResponse
+from typing import Optional
 import os
 import asyncio
 from app.config import settings
@@ -20,21 +21,34 @@ router = APIRouter()
 
 @router.get("/documents/stats")
 async def get_document_stats(
+    client: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Analytics for dashboard: counts documents and sealing status."""
-    # Total docs owned by user
-    print(f"[STATS] Fetching stats for user: {current_user.username}")
-    stmt_total = select(func.count(DocumentLedger.id)).where(func.lower(DocumentLedger.owner_username) == func.lower(current_user.username))
+    print(f"[STATS] Fetching stats for user: {current_user.username}, client filter: {client}")
+    
+    if current_user.role == Role.LAWYER and client:
+        # Filter documents that are accessible by both the lawyer and the client
+        stmt_base = (
+            ((func.lower(DocumentLedger.owner_username) == func.lower(current_user.username)) |
+             (DocumentLedger.shared_with.any(func.lower(User.username) == func.lower(current_user.username))))
+            &
+            ((func.lower(DocumentLedger.owner_username) == func.lower(client)) |
+             (DocumentLedger.shared_with.any(func.lower(User.username) == func.lower(client))))
+        )
+    else:
+        stmt_base = (
+            (func.lower(DocumentLedger.owner_username) == func.lower(current_user.username)) |
+            (DocumentLedger.shared_with.any(func.lower(User.username) == func.lower(current_user.username)))
+        )
+        
+    stmt_total = select(func.count(DocumentLedger.id)).where(stmt_base)
     res_total = await db.execute(stmt_total)
     total_docs = res_total.scalar() or 0
 
-    # Sealed docs (have tx_hash)
-    stmt_sealed = select(func.count(DocumentLedger.id)).where(
-        func.lower(DocumentLedger.owner_username) == func.lower(current_user.username),
-        DocumentLedger.eth_tx_hash.isnot(None)
-    )
+    # Sealed docs (actually confirmed on-chain)
+    stmt_sealed = select(func.count(DocumentLedger.id)).where(stmt_base, DocumentLedger.sealed == True)
     res_sealed = await db.execute(stmt_sealed)
     sealed_docs = res_sealed.scalar() or 0
     
@@ -98,6 +112,15 @@ async def generate_document(request: s.DocumentGenerateRequest, current_user: Us
         signer_id="SYSTEM"
     )
     db.add(ledger_entry)
+    
+    # Automatically share with selected client if provided
+    if request.client_username:
+        client_res = await db.execute(select(User).where(User.username == request.client_username))
+        client_user = client_res.scalar_one_or_none()
+        if client_user:
+            ledger_entry.shared_with.append(client_user)
+            print(f"[LexNet] Document {result['public_id']} automatically shared with client {request.client_username}")
+            
     await db.commit()
     
     # Pre-extract text AND perform Risk Analysis in background (Single-run strategy)
@@ -146,13 +169,26 @@ async def generate_document(request: s.DocumentGenerateRequest, current_user: Us
     )
 
 @router.get("/documents")
-async def list_documents(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def list_documents(
+    client: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     """List documents where user is owner or shared."""
     # Eager load owner to get full_name
-    stmt = select(DocumentLedger).options(selectinload(DocumentLedger.owner)).where(
-        (DocumentLedger.owner_username == current_user.username) | 
-        (DocumentLedger.shared_with.any(User.username == current_user.username))
-    )
+    if current_user.role == Role.LAWYER and client:
+        stmt = select(DocumentLedger).options(selectinload(DocumentLedger.owner)).where(
+            ((DocumentLedger.owner_username == current_user.username) | 
+             (DocumentLedger.shared_with.any(User.username == current_user.username)))
+            &
+            ((DocumentLedger.owner_username == client) | 
+             (DocumentLedger.shared_with.any(User.username == client)))
+        )
+    else:
+        stmt = select(DocumentLedger).options(selectinload(DocumentLedger.owner)).where(
+            (DocumentLedger.owner_username == current_user.username) | 
+            (DocumentLedger.shared_with.any(User.username == current_user.username))
+        )
     result = await db.execute(stmt)
     accessible_docs = result.scalars().all()
     
@@ -164,7 +200,8 @@ async def list_documents(current_user: User = Depends(get_current_user), db: Asy
             "created_at": doc.timestamp.isoformat(),
             "secure_url": f"{settings.STATIC_FILES_URL}/{doc.public_id}",
             "owner": doc.owner_username,
-            "owner_full_name": doc.owner.full_name if doc.owner else None
+            "owner_full_name": doc.owner.full_name if doc.owner else None,
+            "sealed": doc.sealed
         })
     
     return {"documents": documents}
@@ -185,25 +222,49 @@ async def download_document(public_id: str, current_user: User = Depends(get_cur
         raise HTTPException(status_code=403, detail="Access denied or document not found")
         
     file_path = file_service.get_file_path(public_id)
-    print(f"[DOWNLOAD] public_id={public_id}, path={file_path}, exists={os.path.exists(file_path)}")
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found on disk")
-        
-    return FileResponse(
-        path=file_path,
-        filename=public_id,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename={public_id}"}
-    )
+
+    if doc.eth_tx_hash and not doc.sealed:
+        from app.services.eth_service import eth_service
+        try:
+            tx_status = eth_service.check_transaction_status(doc.eth_tx_hash)
+            if tx_status is True:
+                doc.sealed = True
+                await db.commit()
+            elif tx_status is False:
+                doc.eth_tx_hash = None
+                doc.sealed = False
+                await db.commit()
+        except Exception as e:
+            print(f"Error checking transaction status during download: {e}")
+            
+    try:
+        from app.services.pdf_stamper import stamp_pdf_with_verification
+        stamped_pdf_bytes = stamp_pdf_with_verification(file_path, doc)
+        return Response(
+            content=stamped_pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={public_id}"}
+        )
+    except Exception as e:
+        print(f"[DOWNLOAD ERROR] Failed to stamp PDF: {e}")
+        # Fallback to serving the original unstamped PDF
+        return FileResponse(
+            path=file_path,
+            filename=public_id,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={public_id}"}
+        )
 
 @router.post("/documents/share")
 async def share_document(request: dict, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Share a document with a lawyer using the relational association table."""
+    """Share a document with a user (client or lawyer) using the relational association table."""
     public_id = request.get("public_id")
-    lawyer_username = request.get("lawyer_username")
+    target_username = request.get("username") or request.get("lawyer_username")
     
-    if not public_id or not lawyer_username:
-        raise HTTPException(status_code=400, detail="public_id and lawyer_username are required")
+    if not public_id or not target_username:
+        raise HTTPException(status_code=400, detail="public_id and username/lawyer_username are required")
         
     # Get document with shared_with relationship loaded eagerly
     result = await db.execute(
@@ -218,19 +279,19 @@ async def share_document(request: dict, current_user: User = Depends(get_current
     if ledger_entry.owner_username != current_user.username:
         raise HTTPException(status_code=403, detail="Only the owner can share this document")
         
-    # Get lawyer
-    result = await db.execute(select(User).where(User.username == lawyer_username, User.role == Role.LAWYER))
-    lawyer = result.scalar_one_or_none()
-    if not lawyer:
-        raise HTTPException(status_code=404, detail="Lawyer not found")
+    # Get target user
+    result = await db.execute(select(User).where(User.username == target_username))
+    target_user = result.scalar_one_or_none()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
         
     # Check if already shared (using the eagerly loaded relationship)
-    if lawyer not in ledger_entry.shared_with:
+    if target_user not in ledger_entry.shared_with:
         # Add to relationship
-        ledger_entry.shared_with.append(lawyer)
+        ledger_entry.shared_with.append(target_user)
         await db.commit()
         
-    return {"success": True, "message": f"Document shared with {lawyer_username}"}
+    return {"success": True, "message": f"Document shared with {target_username}"}
 
 @router.get("/dashboard/stats")
 async def get_dashboard_stats(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
@@ -358,15 +419,36 @@ async def get_template_text(template_id: str):
         
     # Safe placeholder detection
     import re
-    # Match (...) or 3+ underscores
-    found = re.findall(r'\([^)]+\)|_{3,}', text)
-    unique_placeholders = list(set([p.strip() for p in found]))
+    # Match only parenthesized placeholders on the same line
+    found = re.findall(r'\([^)\n]+\)', text)
+    
+    # Preserve order of appearance while ensuring uniqueness
+    seen = set()
+    unique_placeholders = []
+    for p in [x.strip() for x in found]:
+        if p not in seen:
+            seen.add(p)
+            unique_placeholders.append(p)
+    
+    # Filter out numbering, generic text, and non-placeholders
+    cleaned_placeholders = []
+    for p in unique_placeholders:
+        inner = p[1:-1].strip()
+        if len(inner) < 2 or len(inner) > 50:
+            continue
+        if re.match(r'^\d+$|^[a-zA-Z]$|^[ivxIVX]+$', inner):
+            continue
+        if ',' in inner or ';' in inner or '.' in inner:
+            continue
+        if inner.lower() in ['general', 's', 'if any', 'not exceeding once in a month']:
+            continue
+        cleaned_placeholders.append(p)
     
     return {
         "id": template_id,
         "name": name,
         "content": text,
-        "placeholders": unique_placeholders
+        "placeholders": cleaned_placeholders
     }
 
 

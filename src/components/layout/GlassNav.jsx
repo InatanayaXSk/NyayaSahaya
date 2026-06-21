@@ -74,11 +74,15 @@ export default function GlassNav() {
                                 className="pl-10 pr-4 py-2 bg-background/50 border border-border rounded-xl text-xs font-bold uppercase tracking-wider focus:ring-2 focus:ring-primary w-48 xl:w-56 text-text-base appearance-none cursor-pointer"
                                 value={activeClient?.username || ''}
                                 onChange={(e) => {
-                                    const c = clients.find(cl => cl.username === e.target.value);
-                                    if(c) setActiveClient(c);
+                                    if (e.target.value === '') {
+                                        setActiveClient(null);
+                                    } else {
+                                        const c = clients.find(cl => cl.username === e.target.value);
+                                        if (c) setActiveClient(c);
+                                    }
                                 }}
                             >
-                                {clients.length === 0 && <option value="" disabled>No clients found</option>}
+                                <option value="" className="text-slate-900">All Clients</option>
                                 {clients.map(client => (
                                     <option key={client.id} value={client.username} className="text-slate-900">
                                         {client.username}

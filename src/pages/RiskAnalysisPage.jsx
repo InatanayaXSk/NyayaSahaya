@@ -13,19 +13,20 @@ export default function RiskAnalysisPage() {
     const [error, setError] = useState(null);
     const [activeClause, setActiveClause] = useState(null);
 
-    const { token } = useAuth();
-    const { setActiveDocument } = useClient();
+    const { token, user } = useAuth();
+    const { activeClient, setActiveDocument } = useClient();
 
     useEffect(() => {
         if (token) {
             fetchDocuments();
         }
-    }, [token]);
+    }, [token, activeClient, user]);
 
     const fetchDocuments = async () => {
         if (!token) return;
         try {
-            const resp = await fetch(`${API_BASE}/api/documents`, {
+            const clientQuery = (user?.role === 'lawyer' && activeClient) ? `?client=${encodeURIComponent(activeClient.username)}` : '';
+            const resp = await fetch(`${API_BASE}/api/documents${clientQuery}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }

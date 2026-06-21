@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import FocusTrap from 'focus-trap-react';
 import DOMPurify from 'dompurify';
 import { useAuth } from '../context/AuthContext';
+import { useClient } from '../context/ClientContext';
 
 import { API_BASE } from '../utils/api';
 
@@ -241,7 +242,17 @@ export default function DocumentGeneratorPage() {
         ],
     };
 
-    const { token } = useAuth();
+    const { token, user } = useAuth();
+    const { clients, activeClient } = useClient();
+    const [selectedClient, setSelectedClient] = useState('');
+
+    useEffect(() => {
+        if (activeClient) {
+            setSelectedClient(activeClient.username);
+        } else if (clients && clients.length > 0) {
+            setSelectedClient(clients[0].username);
+        }
+    }, [activeClient, clients]);
 
     // Initial Cache Sync & Template Load
     useEffect(() => {
@@ -327,6 +338,7 @@ export default function DocumentGeneratorPage() {
             const payload = {
                 document_type: templateName,
                 data: formData,
+                client_username: selectedClient || undefined,
             };
             
             const response = await fetch(`${API_BASE}/generate-doc`, {
@@ -438,6 +450,23 @@ export default function DocumentGeneratorPage() {
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 gap-4">
+                                {user?.role === 'lawyer' && (
+                                    <div className="space-y-1.5 border-b border-border/50 pb-4 mb-2">
+                                        <label className={labelClass}>Whom is this document for?</label>
+                                        <select 
+                                            className={inputClass}
+                                            value={selectedClient} 
+                                            onChange={(e) => setSelectedClient(e.target.value)}
+                                        >
+                                            <option value="">-- Select Client --</option>
+                                            {clients.map(c => (
+                                                <option key={c.id} value={c.username}>
+                                                    {c.username} ({c.full_name || 'No Name'})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
                                 <SectionHeader number="1" title="Fill Placeholders" />
                                 {templateData.placeholders.map((p, i) => {
                                     const isSignature = p.toLowerCase().includes('signature');

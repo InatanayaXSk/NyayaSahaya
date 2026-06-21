@@ -14,6 +14,15 @@ DEFAULT_USERS = {
 def _load_users():
     users = DEFAULT_USERS.copy()
 
+    # Load from .env file
+    import os
+    from dotenv import load_dotenv
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    env_path = os.path.join(script_dir, ".env")
+    if not os.path.exists(env_path):
+        env_path = os.path.join(os.path.dirname(script_dir), ".env")
+    load_dotenv(env_path)
+
     if not os.path.isfile(USER_FILE):
         return users
 
@@ -22,10 +31,20 @@ def _load_users():
             payload = json.load(file)
 
         for card_id, user in payload.items():
-            users[int(card_id)] = (
-                user["name"],
-                int(user["fingerprint_position"])
-            )
+            name = user["name"]
+            fp_position = int(user["fingerprint_position"])
+            
+            # Override fingerprint position from env vars if present
+            if name.lower() == "tejasvi":
+                env_val = os.getenv("TEJASVI_FINGERPRINT")
+                if env_val is not None:
+                    fp_position = int(env_val)
+            elif name.lower() == "sudeep":
+                env_val = os.getenv("SUDEEP_FINGERPRINT")
+                if env_val is not None:
+                    fp_position = int(env_val)
+                    
+            users[int(card_id)] = (name, fp_position)
     except Exception as exc:
         print("Could not load authorized users:", exc)
 

@@ -45,9 +45,12 @@ app.include_router(route_templates.router, prefix="/api", tags=["Templates"])
 async def startup():
     """Initialize SQL Database and LexNet Engine."""
     print(f"[LexNet] Initializing PostgreSQL engine...")
+    from sqlalchemy import text
     async with engine.begin() as conn:
         # Create all tables if they don't exist
         await conn.run_sync(Base.metadata.create_all)
+        # Add column if not exists
+        await conn.execute(text("ALTER TABLE ledger ADD COLUMN IF NOT EXISTS sealed BOOLEAN DEFAULT FALSE"))
     
     print(f"[LexNet] Database tables verified/created.")
     print(f"[LexNet] {settings.PROJECT_NAME} v{settings.VERSION} started.")

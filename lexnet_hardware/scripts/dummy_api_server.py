@@ -92,21 +92,45 @@ def _build_signed_payload(card_id, name, fingerprint_id):
 
 def _get_user_info(target_name_or_id):
     """Utility to look up user in authorized_users.json without importing hardware modules."""
-    user_file = os.path.join(os.path.dirname(__file__), "authorized_users.json")
+    import os
+    from dotenv import load_dotenv
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    env_path = os.path.join(script_dir, ".env")
+    if not os.path.exists(env_path):
+        env_path = os.path.join(os.path.dirname(script_dir), ".env")
+    load_dotenv(env_path)
+
+    user_file = os.path.join(script_dir, "authorized_users.json")
     if os.path.isfile(user_file):
         try:
             with open(user_file, "r", encoding="utf-8") as f:
                 users = json.load(f)
             
+            # Helper to get fingerprint position from env overrides
+            def get_fp_pos(name, default_val):
+                if name.lower() == "tejasvi":
+                    env_val = os.getenv("TEJASVI_FINGERPRINT")
+                    if env_val is not None:
+                        return int(env_val)
+                elif name.lower() == "sudeep":
+                    env_val = os.getenv("SUDEEP_FINGERPRINT")
+                    if env_val is not None:
+                        return int(env_val)
+                return int(default_val)
+
             # Check by card_id (as string or int)
             if str(target_name_or_id) in users:
                 u = users[str(target_name_or_id)]
-                return int(target_name_or_id), u.get("name"), u.get("fingerprint_position", 1)
+                name = u.get("name")
+                fp_pos = get_fp_pos(name, u.get("fingerprint_position", 1))
+                return int(target_name_or_id), name, fp_pos
             
             # Check by name (case-insensitive)
             for cid, u in users.items():
                 if u.get("name", "").lower() == str(target_name_or_id).lower():
-                    return int(cid), u.get("name"), u.get("fingerprint_position", 1)
+                    name = u.get("name")
+                    fp_pos = get_fp_pos(name, u.get("fingerprint_position", 1))
+                    return int(cid), name, fp_pos
         except Exception as e:
             print("Error parsing authorized_users.json:", e)
 

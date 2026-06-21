@@ -132,7 +132,7 @@ export default function HardwareAuthModal({ isOpen, onClose, onSuccess, document
 
                     {/* Left side: Visualization */}
                     <div className="flex-1 bg-slate-900 p-8 flex flex-col relative overflow-hidden text-white">
-                        <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#bbbdf6 0.5px, transparent 0.5px)', backgroundSize: '16px 16px' }}></div>
+                        <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#581c87 0.5px, transparent 0.5px)', backgroundSize: '16px 16px' }}></div>
                         
                         <div className="relative z-10 flex items-center gap-2 mb-8">
                             <span className={`inline-block w-2 h-2 rounded-full ${status === 'Online' ? 'bg-primary animate-pulse' : 'bg-red-500'}`}></span>

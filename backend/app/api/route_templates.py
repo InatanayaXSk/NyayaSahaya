@@ -25,11 +25,33 @@ async def get_legal_template(template_id: str, current_user: User = Depends(get_
         with open(template_path, "r", encoding="utf-8") as f:
             content = f.read()
 
-    # Extract placeholders like (Name), (Date), etc.
-    placeholders = list(set(re.findall(r'\(([A-Za-z0-9\s_]+)\)', content)))
+    # Extract placeholders like (Name), (Date), etc. on the same line
+    found = re.findall(r'\([^)\n]+\)', content)
+    
+    # Preserve order of appearance while ensuring uniqueness
+    seen = set()
+    unique_placeholders = []
+    for p in [x.strip() for x in found]:
+        if p not in seen:
+            seen.add(p)
+            unique_placeholders.append(p)
+    
+    # Filter out numbering, generic text, and non-placeholders
+    cleaned_placeholders = []
+    for p in unique_placeholders:
+        inner = p[1:-1].strip()
+        if len(inner) < 2 or len(inner) > 50:
+            continue
+        if re.match(r'^\d+$|^[a-zA-Z]$|^[ivxIVX]+$', inner):
+            continue
+        if ',' in inner or ';' in inner or '.' in inner:
+            continue
+        if inner.lower() in ['general', 's', 'if any', 'not exceeding once in a month']:
+            continue
+        cleaned_placeholders.append(p)
     
     return {
         "id": safe_id,
         "content": content,
-        "placeholders": placeholders
+        "placeholders": cleaned_placeholders
     }

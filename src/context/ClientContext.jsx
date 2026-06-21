@@ -30,9 +30,6 @@ export const ClientProvider = ({ children }) => {
             })
             .then(data => {
                 setClients(data);
-                if (data.length > 0 && !activeClient) {
-                    setActiveClient(data[0]); // Default to first client
-                }
             })
             .catch(err => console.error("Error fetching clients:", err))
             .finally(() => setLoading(false));

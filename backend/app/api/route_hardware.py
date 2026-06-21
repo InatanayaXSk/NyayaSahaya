@@ -137,27 +137,39 @@ async def verify_on_chain(
     if not (is_owner or is_authorized_lawyer):
         raise HTTPException(status_code=403, detail="Access denied")
 
+    if doc.sealed:
+        raise HTTPException(status_code=409, detail="Already sealed")
+
     if doc.eth_tx_hash:
-        tx_status = eth_service.check_transaction_status(doc.eth_tx_hash)
-        if tx_status is True:
-            raise HTTPException(status_code=409, detail="Already sealed")
-        elif tx_status is False:
-            # Previous transaction failed/reverted. Clear it and allow retry.
-            doc.eth_tx_hash = None
-            await db.commit()
-        else:
+        try:
+            tx_status = eth_service.check_transaction_status(doc.eth_tx_hash)
+            if tx_status is True:
+                doc.sealed = True
+                await db.commit()
+                raise HTTPException(status_code=409, detail="Already sealed")
+            elif tx_status is False:
+                # Previous transaction failed/reverted. Clear it and allow retry.
+                doc.eth_tx_hash = None
+                doc.sealed = False
+                await db.commit()
+            else:
+                raise HTTPException(status_code=409, detail="A transaction is already pending on-chain")
+        except Exception:
             raise HTTPException(status_code=409, detail="A transaction is already pending on-chain")
 
     # Dual-Authorization Logic
     # We need a lawyer and a client.
-    client_username = doc.owner_username
-    # Find the first lawyer associated with this document
-    lawyers = [u.username for u in doc.shared_with if u.role == Role.LAWYER]
-    
+    all_involved = [doc.owner] + doc.shared_with
+    lawyers = [u.username for u in all_involved if u.role == Role.LAWYER]
+    clients = [u.username for u in all_involved if u.role == Role.CLIENT]
+
     if not lawyers:
-        raise HTTPException(status_code=400, detail="This document must be shared with a lawyer before sealing.")
-    
-    lawyer_username = lawyers[0] # Pick the primary lawyer
+        raise HTTPException(status_code=400, detail="This document must be shared with or owned by a lawyer before sealing.")
+    if not clients:
+        raise HTTPException(status_code=400, detail="This document must be shared with or owned by a client before sealing.")
+
+    lawyer_username = lawyers[0]
+    client_username = clients[0]
 
     # --- PHASE 1: LAWYER AUTHORIZATION ---
     await hardware_provider._broadcast("INFO", f"DUAL-AUTH PHASE 1: Waiting for Lawyer ({lawyer_username})")
@@ -181,6 +193,7 @@ async def verify_on_chain(
 
     doc.eth_tx_hash = tx_hash
     doc.eth_chain_id = 11155111
+    doc.sealed = False
     await db.commit()
 
     return {
@@ -209,8 +222,26 @@ async def chain_status(
 
     tx_status = None
     if doc.eth_tx_hash:
+        # ALWAYS check the real blockchain — never trust the local sealed flag alone.
+        # This corrects phantom "sealed" entries where the tx was never actually mined.
         try:
             tx_status = eth_service.check_transaction_status(doc.eth_tx_hash)
+            if tx_status is True and not doc.sealed:
+                # Transaction confirmed on-chain; update local flag
+                doc.sealed = True
+                await db.commit()
+            elif tx_status is False:
+                # Transaction failed/reverted. Clear it and allow retry.
+                print(f"[chain-status] TX {doc.eth_tx_hash} reverted for {doc.public_id}. Clearing.")
+                doc.eth_tx_hash = None
+                doc.sealed = False
+                await db.commit()
+            elif tx_status is None and doc.sealed:
+                # Local says sealed but blockchain says tx not found — phantom entry!
+                print(f"[chain-status] PHANTOM detected: {doc.public_id} marked sealed but tx {doc.eth_tx_hash} not found on-chain. Resetting.")
+                doc.eth_tx_hash = None
+                doc.sealed = False
+                await db.commit()
         except Exception as e:
             print(f"Error checking transaction status: {e}")
 

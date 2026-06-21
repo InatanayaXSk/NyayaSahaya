@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useClient } from '../context/ClientContext';
 import { mapUserName } from '../utils/userMapping';
 
 import { API_BASE } from '../utils/api';
@@ -42,17 +43,20 @@ export default function DashboardPage() {
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
 
-    const { token } = useAuth();
+    const { token, user } = useAuth();
+    const { activeClient } = useClient();
 
     useEffect(() => {
         if (!token) return;
         setLoading(true);
 
-        const fetchStats = fetch(`${API_BASE}/documents/stats`, {
+        const clientQuery = (user?.role === 'lawyer' && activeClient) ? `?client=${encodeURIComponent(activeClient.username)}` : '';
+
+        const fetchStats = fetch(`${API_BASE}/documents/stats${clientQuery}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         }).then(r => r.json());
 
-        const fetchDocs = fetch(`${API_BASE}/documents`, {
+        const fetchDocs = fetch(`${API_BASE}/documents${clientQuery}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         }).then(r => r.json());
 
@@ -65,7 +69,7 @@ export default function DashboardPage() {
             })
             .catch(err => console.error("Dashboard Fetch Error:", err))
             .finally(() => setLoading(false));
-    }, [token]);
+    }, [token, activeClient, user]);
 
     return (
         <div className="max-w-[1200px] mx-auto px-6 lg:px-10 py-8 space-y-8 bg-background text-text-base">
@@ -75,13 +79,15 @@ export default function DashboardPage() {
                     <h1 className="text-primary font-serif-display text-4xl font-black uppercase tracking-tight">Operations <span className="text-text-base">Dashboard</span></h1>
                     <p className="text-text-muted mt-2 text-sm max-w-xl">Comprehensive overview of document lifecycle, cryptographic sealing status, and real-time ledger health monitoring.</p>
                 </div>
-                <button 
-                    onClick={() => navigate('/document-generator')}
-                    className="flex items-center justify-center rounded-xl bg-primary text-slate-900 h-12 px-8 font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all gap-2"
-                >
-                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>add_circle</span>
-                    <span>New Document</span>
-                </button>
+                {user?.role === 'lawyer' && (
+                    <button 
+                        onClick={() => navigate('/document-generator')}
+                        className="flex items-center justify-center rounded-xl bg-primary text-slate-900 h-12 px-8 font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all gap-2"
+                    >
+                        <span className="material-symbols-outlined" style={{ fontSize: 20 }}>add_circle</span>
+                        <span>New Document</span>
+                    </button>
+                )}
             </div>
 
             {/* Metrics Grid */}

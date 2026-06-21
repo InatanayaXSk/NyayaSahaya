@@ -17,6 +17,7 @@ class ChatResponse(BaseModel):
 class DocumentGenerateRequest(BaseModel):
     document_type: str  # "Sale Deed", "Will", "Power of Attorney"
     data: Dict[str, str]
+    client_username: Optional[str] = None
 
 
 class DocumentGenerateResponse(BaseModel):

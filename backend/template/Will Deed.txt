@@ -1,40 +1,35 @@
 WILL-DEED 
  
-I Sri._______________________ S/o.____________________ residing at 
-________________________________________________ aged about ________ 
-years _________ by religion, occupation _______________ do make this my last 
+I Sri. (Testator Name) S/o. (Testator Father Name) residing at 
+(Testator Address) aged about (Testator Age) 
+years (Testator Religion) by religion, occupation (Testator Occupation) do make this my last 
 will and testament. 
  
 1. I have not made any will or other testamentary document, but if any made, I 
 hereby revoke all previous wills and codicils, if any and declare this to be my 
 last will and testament. 
  
-2. I appoint (1) Sri._______________________ S/o.____________________ 
-residing at ________________________________________________ aged 
-about ________ years _________ by religion, occupation _______________ 
-(2) Sri._______________________ S/o.____________________ residing at 
-________________________________________________ 
+2. I appoint (1) Sri. (Executor 1 Name) S/o. (Executor 1 Father Name) 
+residing at (Executor 1 Address) aged 
+about (Executor 1 Age) years (Executor 1 Religion) by religion, occupation (Executor 1 Occupation) 
+(2) Sri. (Executor 2 Name) S/o. (Executor 2 Father Name) residing at 
+(Executor 2 Address) 
 aged 
 about 
-________ years _________ by religion, occupation _______________ (3) 
-Sri._______________________ S/o.____________________ residing at 
-________________________________________________ 
-aged 
-about 
-________ years _________ by religion, occupation _______________ as the 
+(Executor 2 Age) years (Executor 2 Religion) by religion, occupation (Executor 2 Occupation) as the 
 executor of this will and trustees of my estate. 
  
-3. My family consists of _____________________  
+3. My family consists of (Family Details)  
  
-4. My property consists of  
+4. My property consists of (Property Details)  
  
-(a) 
-(b) 
-(c) etc. 
+(a) (Property Asset A)
+(b) (Property Asset B)
+(c) (Property Asset C) etc. 
  
 5. I bequeath all my property in whatever form existing at the time of my death to 
 the said executor and trustees to hold the same on trust for the benefit of my 
-wife Smt._____________________ for her life time and till her death as herein 
+wife Smt. (Wife Name) for her life time and till her death as herein 
 after provided. 
  
 6. My executors and trustees shall, after spending the necessary money for the 
@@ -45,15 +40,13 @@ corpus of estate such amounts as may be required by my wife for medical
 expenses or for pilgrimage. But my executor and trustees will not be entitled to 
 sell my immovable property above mentioned or mortgage the same. 
  
-7. On the death of my and if she predeceases me then on my death all my estate 
+7. On the death of my wife and if she predeceases me then on my death all my estate 
 then existing whether mentioned in this will or not, will belongs to my 
 children,  
  
- 
-2
-(a) ____________________ 
-(b) ____________________ 
-(c) ____________________ absolutely in equal shares and the trustees for the 
+(a) (Beneficiary 1 Name) 
+(b) (Beneficiary 2 Name) 
+(c) (Beneficiary 3 Name) absolutely in equal shares and the trustees for the 
 time being of the said estate under this will shall transfer the same among 
 said children by executing proper document or documents. 
  
@@ -70,27 +63,24 @@ way of taxes or otherwise howsoever.
  
 10. I have made this will out of my free will and when I am in sound health and in 
 good understanding and in witness thereof I have put my signature hereunder 
-in the presence of witnesses on this _________ day of _____________ month 
-of ______________ year. 
+in the presence of witnesses on this (Date) day of (Month) month 
+of (Year) year. 
  
  
 Signed by the within named testator     } 
-Sri. _________________________   } 
+Sri. (Testator Name)   } 
 opposite in the presence of witnesses, } 
  
  
-TESTATOR 
+(Signature of the Testator) 
 who in presence and at his request and } 
 in the presence of each other have put  } 
 there signature as witnesses hereunder.} 
  
-1.Sri. __________________________ 
+1. Sri. (Witness 1 Name) 
+        Full Address: (Witness 1 Address) 
+        Witness Signature: (Signature of Witness 1)
  
-        Full Address: _________________ 
-        . _________________ 
- 
-2. Sri. __________________________ 
- 
-        Full Address: _________________ 
-                               . _________________ 
- 
+2. Sri. (Witness 2 Name) 
+        Full Address: (Witness 2 Address) 
+        Witness Signature: (Signature of Witness 2)

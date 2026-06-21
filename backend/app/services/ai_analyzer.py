@@ -6,21 +6,31 @@ import tempfile
 import httpx
 import numpy as np
 import PyPDF2
-from docling.document_converter import DocumentConverter
+import fitz
 from sqlalchemy import select, update
+from app.config import settings
 from app.models import DocumentLedger, DocumentAnalysis
 
 class AIAnalyzer:
     def __init__(self):
-        self.generation_model = "gemma-4-E4B" # Doesn't strictly matter for llama.cpp but good for logs
+        self.generation_model = settings.OPENROUTER_MODEL
         self.embedding_model = "all-MiniLM-L6-v2"
-        self.llama_base_url = "http://localhost:8080"
+        self.openrouter_api_key = settings.OPENROUTER_API_KEY
         self.index = None
         self.chunks = []
         self.file_cache = {} # Static in-memory cache public_id -> text
-        self.converter = None # Lazy-loaded Singleton Docling Converter
         self.embedder = None # Lazy-loaded SentenceTransformer
-        self.client = httpx.AsyncClient(base_url=self.llama_base_url, timeout=120.0)
+        
+        headers = {
+            "HTTP-Referer": "http://localhost:8000",
+            "X-Title": "LexNet AI",
+        }
+        if self.openrouter_api_key and self.openrouter_api_key.strip():
+            headers["Authorization"] = f"Bearer {self.openrouter_api_key.strip()}"
+        else:
+            print("[LexNet] WARNING: OPENROUTER_API_KEY is not set. OpenRouter completions will fail.")
+            
+        self.client = httpx.AsyncClient(base_url="https://openrouter.ai/api/v1/", headers=headers, timeout=120.0)
         self.ANALYSIS_SCHEMA = {
             "document_name": "Legal Asset",
             "summary": "AI summary currently unavailable.",
@@ -44,9 +54,57 @@ class AIAnalyzer:
         except Exception as e:
             print(f"[LexNet] Failed to load FAISS index: {e}")
 
+    async def _save_analysis_data(self, db, ledger_doc, update_dict: dict) -> None:
+        """Safely save or update DocumentAnalysis in a way that avoids IntegrityError and race conditions."""
+        if not db or not ledger_doc:
+            return
+
+        # Perform a fresh query to get the existing analysis
+        stmt = select(DocumentAnalysis).where(DocumentAnalysis.document_id == ledger_doc.id)
+        res = await db.execute(stmt)
+        existing_analysis = res.scalar_one_or_none()
+
+        if existing_analysis:
+            # Merge existing data with new update_dict
+            current_data = dict(existing_analysis.analysis_data or {})
+            merged_data = {**self.ANALYSIS_SCHEMA, **current_data, **update_dict}
+            existing_analysis.analysis_data = merged_data
+        else:
+            merged_data = {**self.ANALYSIS_SCHEMA, **update_dict}
+            new_analysis = DocumentAnalysis(
+                document_id=ledger_doc.id,
+                analysis_data=merged_data
+            )
+            db.add(new_analysis)
+
+        try:
+            await db.commit()
+        except Exception as e:
+            # If a unique violation or other commit error happens, rollback to keep session healthy
+            await db.rollback()
+            print(f"[LexNet] DB commit failed during analysis save: {e}. Retrying update...")
+            # Retry by fetching again and updating
+            stmt = select(DocumentAnalysis).where(DocumentAnalysis.document_id == ledger_doc.id)
+            res = await db.execute(stmt)
+            existing_analysis = res.scalar_one_or_none()
+            if existing_analysis:
+                current_data = dict(existing_analysis.analysis_data or {})
+                merged_data = {**self.ANALYSIS_SCHEMA, **current_data, **update_dict}
+                existing_analysis.analysis_data = merged_data
+                try:
+                    await db.commit()
+                except Exception as retry_e:
+                    await db.rollback()
+                    print(f"[LexNet] Retry of analysis save failed: {retry_e}")
+                    raise retry_e
+            else:
+                print(f"[LexNet] Retry failed: analysis record still not found after rollback.")
+                raise e
+
     async def _call_llama_server(self, prompt: str, json_format: bool = False) -> str:
-        url = "/v1/chat/completions"
+        url = "chat/completions"
         payload = {
+            "model": self.generation_model,
             "messages": [{"role": "user", "content": prompt}],
             "stream": False
         }
@@ -79,8 +137,9 @@ class AIAnalyzer:
             return f"ERROR_AI: {str(e)}"
             
     async def _call_llama_server_stream(self, prompt: str):
-        url = "/v1/chat/completions"
+        url = "chat/completions"
         payload = {
+            "model": self.generation_model,
             "messages": [{"role": "user", "content": prompt}],
             "stream": True
         }
@@ -147,12 +206,17 @@ class AIAnalyzer:
             self.embedder = SentenceTransformer(self.embedding_model)
         return self.embedder
 
-    def _init_converter(self):
-        """Lazily initialize the heavy Docling AI model (2GB RAM)."""
-        if self.converter is None:
-            print("[LexNet] Initializing heavy Docling AI model (2GB RAM)...")
-            self.converter = DocumentConverter()
-        return self.converter
+    def _get_pymupdf_text(self, file_path: str) -> str:
+        """Fast and robust text extraction using PyMuPDF (fitz)."""
+        try:
+            text = ""
+            doc = fitz.open(file_path)
+            for page in doc:
+                text += page.get_text() or ""
+            return text.strip()
+        except Exception as e:
+            print(f"[LexNet] PyMuPDF extraction failed: {e}")
+            return ""
 
     def _get_pypdf2_text(self, file_path: str) -> str:
         """Fast, lightweight text extraction from PDF using standard rules (no AI)."""
@@ -168,7 +232,7 @@ class AIAnalyzer:
             return ""
 
     async def _get_local_text(self, file_path: str, public_id: str, db=None) -> str:
-        """Hierarchical text extraction: DB Cache -> PyPDF2 (Fast) -> Docling (AI)."""
+        """Hierarchical text extraction: DB Cache -> PyMuPDF -> PyPDF2."""
         if public_id in self.file_cache:
             return self.file_cache[public_id]
 
@@ -182,49 +246,34 @@ class AIAnalyzer:
             stmt = select(DocumentLedger.extracted_text).where(DocumentLedger.public_id == public_id)
             res = await db.execute(stmt)
             cached_text = res.scalar_one_or_none()
-            if cached_text:
+            if cached_text and not cached_text.startswith("ERROR_NO_CONTENT"):
                 print(f"[LexNet] DB cache HIT for {public_id}")
                 self.file_cache[public_id] = cached_text
                 return cached_text
-            print(f"[LexNet] DB cache MISS for {public_id}")
+            print(f"[LexNet] DB cache MISS or error state for {public_id}")
 
-        # 2. Try PyPDF2 (Lighter/Fast)
-        print(f"[LexNet] Attempting fast PyPDF2 extraction for {public_id}...")
-        fast_text = self._get_pypdf2_text(file_path)
-        if len(fast_text) > 100: # Enough for metadata/analysis
-            print(f"[LexNet] PyPDF2 found {len(fast_text)} chars. Using fast path.")
-            # Cache it back to DB if session provided
-            if db:
-                from sqlalchemy import update
-                await db.execute(update(DocumentLedger).where(DocumentLedger.public_id == public_id).values(extracted_text=fast_text))
-                await db.commit()
-            self.file_cache[public_id] = fast_text
-            return fast_text
+        # 2. Try PyMuPDF (Primary/Fast & Robust)
+        print(f"[LexNet] Attempting PyMuPDF extraction for {public_id}...")
+        text = self._get_pymupdf_text(file_path)
 
-        # 3. Last Resort: Docling (AI/Heavy - 2GB RAM)
-        try:
-            print(f"[LexNet] FALLBACK: Running heavy Docling AI extraction for {public_id}...")
-            converter = self._init_converter()
-            result = converter.convert(file_path)
-            text = result.document.export_to_markdown()
-            
-            text = text.strip()[:15000] # Limit context
-            print(f"[LexNet] Docling extracted {len(text)} characters.")
-            
-            if len(text) < 50:
-                self.file_cache[public_id] = "ERROR_NO_CONTENT: Image-only scan detected. Please upload a readable PDF."
-                return self.file_cache[public_id]
-            
-            # Save to Cache & DB
-            self.file_cache[public_id] = text
-            if db:
-                from sqlalchemy import update
-                await db.execute(update(DocumentLedger).where(DocumentLedger.public_id == public_id).values(extracted_text=text))
-                await db.commit()
-            return text
-        except Exception as e:
-            print(f"[LexNet] Deep AI parsing failed: {e}")
-            return f"ERROR_PARSING: {str(e)}"
+        # 3. Fallback to PyPDF2 if PyMuPDF returned no text
+        if len(text.strip()) == 0:
+            print(f"[LexNet] PyMuPDF returned no text. Falling back to PyPDF2 for {public_id}...")
+            text = self._get_pypdf2_text(file_path)
+
+        text = text.strip()[:15000] # Limit context
+
+        if len(text) == 0:
+            self.file_cache[public_id] = "ERROR_NO_CONTENT: Image-only scan detected. Please upload a readable PDF."
+            return self.file_cache[public_id]
+
+        # Save to Cache & DB
+        self.file_cache[public_id] = text
+        if db:
+            from sqlalchemy import update
+            await db.execute(update(DocumentLedger).where(DocumentLedger.public_id == public_id).values(extracted_text=text))
+            await db.commit()
+        return text
 
     async def retrieval_qa_stream(self, query: str, web_search: bool = False):
         """RAG Q&A using Ollama and FAISS (General Knowledge) with Streaming."""
@@ -320,23 +369,19 @@ Instructions: Answer the user's question comprehensively. Use the provided conte
             
             ai_data = json.loads(raw_text)
             
-            # 4. Schema Enforcement: Merge with defaults to prevent frontend errors
-            analysis_dict = {**self.ANALYSIS_SCHEMA, **ai_data}
-            
-            # 5. Persist to DB (UPSERT logic)
+            # 4. Persist to DB safely (UPSERT logic via helper)
             if db and ledger_doc:
                 print(f"[LexNet] Saving/Updating Analysis in DB for {public_id}")
-                if ledger_doc.analysis:
-                    ledger_doc.analysis.analysis_data = analysis_dict
-                else:
-                    new_analysis = DocumentAnalysis(
-                        document_id=ledger_doc.id,
-                        analysis_data=analysis_dict
-                    )
-                    db.add(new_analysis)
-                await db.commit()
+                await self._save_analysis_data(db, ledger_doc, ai_data)
                 
-            return analysis_dict
+                # Fetch the latest saved state to return to client
+                stmt = select(DocumentAnalysis).where(DocumentAnalysis.document_id == ledger_doc.id)
+                res = await db.execute(stmt)
+                existing_analysis = res.scalar_one_or_none()
+                if existing_analysis:
+                    return existing_analysis.analysis_data
+
+            return {**self.ANALYSIS_SCHEMA, **ai_data}
         except Exception as e:
             # Even on failure, return a valid SCHEMA result with the error embedded
             error_msg = f"ERROR_PARSE: {str(e)}"
@@ -559,11 +604,30 @@ Instructions: Answer the user's question comprehensively. Use the provided conte
         }
  
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(url, json=payload)
                 if response.status_code == 200:
                     data = response.json()
-                    raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                    candidates = data.get("candidates", [])
+                    if not candidates:
+                        print(f"[LexNet] Gemini returned no candidates. Full response: {data}")
+                        raise KeyError("No candidates returned in Gemini response.")
+                    
+                    candidate = candidates[0]
+                    content = candidate.get("content", {})
+                    parts = content.get("parts", [])
+                    if not parts:
+                        print(f"[LexNet] Gemini candidate missing parts. Candidate: {candidate}")
+                        # Check if there is a finish reason like SAFETY
+                        finish_reason = candidate.get("finishReason")
+                        if finish_reason:
+                            raise RuntimeError(f"Gemini generation blocked. Finish reason: {finish_reason}")
+                        raise KeyError("parts")
+                    
+                    raw_text = parts[0].get("text", "")
+                    if not raw_text:
+                        print(f"[LexNet] Gemini candidate part has no text. Part: {parts[0]}")
+                        raise KeyError("text")
                     
                     # Robust JSON extraction
                     json_match = re.search(r'(\{.*\})', raw_text, re.DOTALL)
@@ -576,25 +640,75 @@ Instructions: Answer the user's question comprehensively. Use the provided conte
                     # 7. Persist similar_cases back to DB
                     if db and ledger_doc and similar_cases:
                         print(f"[LexNet] Saving similar cases to DB for {public_id}")
-                        if ledger_doc.analysis:
-                            analysis_dict = dict(ledger_doc.analysis.analysis_data or {})
-                            analysis_dict["similar_cases"] = similar_cases
-                            ledger_doc.analysis.analysis_data = analysis_dict
-                        else:
-                            analysis_dict = {**self.ANALYSIS_SCHEMA, "similar_cases": similar_cases}
-                            new_analysis = DocumentAnalysis(
-                                document_id=ledger_doc.id,
-                                analysis_data=analysis_dict
-                            )
-                            db.add(new_analysis)
-                        await db.commit()
+                        await self._save_analysis_data(db, ledger_doc, {"similar_cases": similar_cases})
                         
                     return similar_cases
                 else:
                     raise RuntimeError(f"Gemini API error (Status {response.status_code}): {response.text}")
         except Exception as e:
-            print(f"[LexNet] Gemini similar cases exception: {e}")
-            raise e
+            print(f"[LexNet] Gemini similar cases exception: {e}. Attempting OpenRouter/FAISS fallback...")
+            try:
+                # 1. Retrieve RAG context if FAISS is available
+                context = ""
+                if self.index and self.chunks:
+                    try:
+                        embedder = self._init_embedder()
+                        embedding = embedder.encode(text_context[:1000])
+                        query_vector = np.array([embedding], dtype='float32')
+                        D, I = self.index.search(query_vector, 3)
+                        context_pieces = [self.chunks[i] for i in I[0] if i < len(self.chunks) and i != -1]
+                        context = "\n\n".join(context_pieces)
+                    except Exception as faiss_exc:
+                        print(f"[LexNet] Fallback FAISS search failed: {faiss_exc}")
+
+                # 2. Formulate fallback prompt
+                fallback_prompt = f"""
+                You are a legal assistant specializing in Indian law. 
+                Based on your knowledge of Indian law and the following context/document details, suggest 3 relevant landmark legal cases, precedents, or landlord-tenant disputes in India.
+
+                Document Type: {document_type}
+                Document Content:
+                ---
+                {text_context[:2000]}
+                ---
+                """
+                if context:
+                    fallback_prompt += f"\nRelevant legal knowledge context:\n{context}\n"
+                
+                fallback_prompt += """
+                Identify 3 relevant legal cases/precedents.
+                Return your response ONLY as a valid JSON object with this exact structure:
+                {
+                    "similar_cases": [
+                        {
+                            "title": "Precise name of the case (e.g. Mohori Bibee v. Dharmodas Ghose)",
+                            "link": "https://indiankanoon.org/doc/... or similar link",
+                            "summary": "A 2-3 sentence summary of the case facts, legal issue, and what was decided."
+                        }
+                    ]
+                }
+                Do not include any markdown styling like ```json. Just raw JSON.
+                """
+                
+                raw_text = await self._call_llama_server(fallback_prompt, json_format=True)
+                
+                # Robust JSON extraction
+                json_match = re.search(r'(\{.*\})', raw_text, re.DOTALL)
+                if json_match:
+                    raw_text = json_match.group(1)
+                
+                parsed = json.loads(raw_text)
+                similar_cases = parsed.get("similar_cases", [])
+                
+                # 3. Persist fallback similar_cases back to DB safely
+                if db and ledger_doc and similar_cases:
+                    print(f"[LexNet] Saving fallback similar cases to DB for {public_id}")
+                    await self._save_analysis_data(db, ledger_doc, {"similar_cases": similar_cases})
+                    
+                return similar_cases
+            except Exception as fallback_exc:
+                print(f"[LexNet] Fallback similar cases generation failed: {fallback_exc}")
+                raise e
 
 
     async def explain_jargon_stream(self, text: str):

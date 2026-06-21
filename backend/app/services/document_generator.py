@@ -47,14 +47,21 @@ def generate_document_from_template(document_type: str, data: dict) -> BytesIO |
 
     # Dynamic Placeholder Replacement
     for placeholder, value in data.items():
+        # Skip signature placeholders so we can handle them during drawing
+        if "signature" in placeholder.lower():
+            continue
         if value:
             # Simple string replacement for stability
             text = text.replace(placeholder, str(value))
                 
-    # Scrub remaining placeholders with legally appropriate blanks
-    # Detects (Any Placeholder) or _______
+    # Scrub remaining non-signature placeholders with legally appropriate blanks
+    # Detects (Any Placeholder) or _______ on the same line
     import re
-    text = re.sub(r'\([^)]*\)', '________________', text)
+    all_placeholders = re.findall(r'\([^)\n]+\)', text)
+    for p in all_placeholders:
+        if "signature" not in p.lower():
+            text = text.replace(p, "________________")
+            
     text = re.sub(r'_{3,}', '________________', text)
     
     # Drawing logic
@@ -62,6 +69,57 @@ def generate_document_from_template(document_type: str, data: dict) -> BytesIO |
     for line in lines:
         if not line.strip():
             y_pos -= line_height
+            continue
+            
+        # Check if this line contains any signature placeholder
+        found_sig_placeholder = None
+        found_sig_val = None
+        for placeholder, value in data.items():
+            if "signature" in placeholder.lower() and placeholder in line:
+                if value and value.startswith("data:image/"):
+                    found_sig_placeholder = placeholder
+                    found_sig_val = value
+                else:
+                    # If signature not provided, replace with blank line
+                    line = line.replace(placeholder, "________________")
+                break
+                
+        if found_sig_placeholder:
+            # Draw line with signature image
+            parts = line.split(found_sig_placeholder, 1)
+            prefix = parts[0]
+            suffix = parts[1] if len(parts) > 1 else ""
+            
+            # Check page overflow
+            if y_pos <= margin + 35:
+                c.showPage()
+                y_pos = height - margin
+                c.setFont("Helvetica", 11)
+                
+            c.drawString(margin, y_pos, prefix)
+            x_offset = c.stringWidth(prefix, "Helvetica", 11)
+            
+            # Draw signature image
+            try:
+                import base64
+                from reportlab.lib.utils import ImageReader
+                
+                header, base64_data = found_sig_val.split(",", 1)
+                img_data = base64.b64decode(base64_data)
+                img_io = BytesIO(img_data)
+                img_reader = ImageReader(img_io)
+                
+                # Draw the signature image
+                c.drawImage(img_reader, margin + x_offset + 5, y_pos - 10, width=80, height=30, mask='auto')
+            except Exception as e:
+                print(f"Error drawing signature: {e}")
+                c.drawString(margin + x_offset + 5, y_pos, "________________")
+                
+            # Draw suffix
+            if suffix.strip():
+                c.drawString(margin + x_offset + 90, y_pos, suffix)
+                
+            y_pos -= 35 # Give space for signature height
             continue
             
         # Basic text wrapping
