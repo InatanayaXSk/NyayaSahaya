@@ -79,9 +79,12 @@ async def analyze_document(request: dict, current_user: User = Depends(get_curre
     if not ledger_entry:
         raise HTTPException(status_code=403, detail="Access denied or document not found")
 
-    # Local Analysis: Read from disk
-    file_path = file_service.get_file_path(public_id)
-    analysis = await ai_analyzer.analyze_document(file_path, public_id=public_id, db=db)
+    # Local Analysis: Read from database bytes
+    try:
+        pdf_bytes = await file_service.get_pdf_bytes(public_id, db)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found in database")
+    analysis = await ai_analyzer.analyze_document(file_path="", public_id=public_id, db=db, pdf_bytes=pdf_bytes)
     return analysis
 
 
@@ -91,7 +94,7 @@ async def generate_document(request: s.DocumentGenerateRequest, current_user: Us
     document_type = request.document_type
     data = request.data
 
-    pdf_io = generate_document_from_template(document_type, data)
+    pdf_io = generate_document_from_template(document_type, data, custom_text=request.custom_text)
     if not pdf_io:
         return s.DocumentGenerateResponse(success=False, filename="", message="Error generating document")
         
@@ -109,7 +112,8 @@ async def generate_document(request: s.DocumentGenerateRequest, current_user: Us
         document_type=document_type,
         current_hash=result["doc_hash"],
         owner_username=current_user.username,
-        signer_id="SYSTEM"
+        signer_id="SYSTEM",
+        pdf_data=pdf_bytes
     )
     db.add(ledger_entry)
     
@@ -128,44 +132,22 @@ async def generate_document(request: s.DocumentGenerateRequest, current_user: Us
     from app.database import engine
     from sqlalchemy.orm import sessionmaker
     
-    async def run_background_analysis(path, p_id):
+    async def run_background_analysis(p_bytes, p_id):
         SessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         async with SessionLocal() as background_db:
             print(f"[LexNet] Background Analysis started for {p_id}")
-            await ai_analyzer.analyze_document(path, public_id=p_id, db=background_db)
+            await ai_analyzer.analyze_document(file_path="", public_id=p_id, db=background_db, pdf_bytes=p_bytes)
             print(f"[LexNet] Background Analysis complete for {p_id}")
 
-    file_path = file_service.get_file_path(result["filename"])
-    asyncio.create_task(run_background_analysis(file_path, result["public_id"]))
-
-    return s.DocumentGenerateResponse(
-        success=True,
-        filename=result["filename"],
-        secure_url=result["url"],
-        message="Document generated and stored locally."
-    )
-
-    # Use the unsigned secure_url from Cloudinary — it doesn't expire
-    # For forced download we use flags="attachment" but without sign_url
-    try:
-        download_url, _ = cloudinary.utils.cloudinary_url(
-            result["public_id"],
-            resource_type="raw",
-            sign_url=False,
-            secure=True,
-            flags="attachment"
-        )
-    except Exception:
-        download_url = result.get("url", "")
+    asyncio.create_task(run_background_analysis(pdf_bytes, result["public_id"]))
 
     return s.DocumentGenerateResponse(
         success=True,
         public_id=result["public_id"],
-        filename=filename + ".pdf",
-        message="Document successfully generated and stored in Cloudinary.",
+        filename=result["filename"],
+        message="Document successfully generated and stored in database.",
         doc_hash=result["doc_hash"],
-        download_url=download_url,
-        cloudinary_url=result["url"],
+        download_url=result["url"]
     )
 
 @router.get("/documents")
@@ -251,9 +233,10 @@ async def download_document(
     if not doc:
         raise HTTPException(status_code=403, detail="Access denied or document not found")
         
-    file_path = file_service.get_file_path(public_id)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found on disk")
+    try:
+        pdf_bytes = await file_service.get_pdf_bytes(public_id, db)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found in database")
 
     if doc.eth_tx_hash and not doc.sealed:
         from app.services.eth_service import eth_service
@@ -269,23 +252,12 @@ async def download_document(
         except Exception as e:
             print(f"Error checking transaction status during download: {e}")
             
-    try:
-        from app.services.pdf_stamper import stamp_pdf_with_verification
-        stamped_pdf_bytes = stamp_pdf_with_verification(file_path, doc)
-        return Response(
-            content=stamped_pdf_bytes,
-            media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename={public_id}"}
-        )
-    except Exception as e:
-        print(f"[DOWNLOAD ERROR] Failed to stamp PDF: {e}")
-        # Fallback to serving the original unstamped PDF
-        return FileResponse(
-            path=file_path,
-            filename=public_id,
-            media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename={public_id}"}
-        )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={public_id}"}
+    )
+
 
 @router.post("/documents/share")
 async def share_document(request: dict, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
@@ -367,10 +339,9 @@ async def get_similar_cases(
     if not doc:
         raise HTTPException(status_code=403, detail="Access denied or document not found")
 
-    file_path = file_service.get_file_path(public_id)
     try:
         similar_cases = await ai_analyzer.get_similar_cases(
-            file_path, public_id=public_id, document_type=doc.document_type, force=force, db=db
+            file_path="", public_id=public_id, document_type=doc.document_type, force=force, db=db
         )
     except ValueError as val_err:
         raise HTTPException(status_code=400, detail=str(val_err))

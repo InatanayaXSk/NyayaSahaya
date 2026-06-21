@@ -48,6 +48,9 @@ def generate_document_from_template(document_type: str, data: dict, custom_text:
             print(f"Error reading template: {e}")
             return None
 
+    # Normalize carriage returns and line endings
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
+
     # Dynamic Placeholder Replacement
     for placeholder, value in data.items():
         # Skip signature placeholders so we can handle them during drawing

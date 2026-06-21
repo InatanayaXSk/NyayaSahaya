@@ -1,25 +1,69 @@
 """AI Service for Document Analysis, Summarization, and Legal RAG via Local Ollama."""
 import os
 import json
-import faiss
+import re
+import math
 import tempfile
 import httpx
-import numpy as np
 import PyPDF2
 import fitz
 from sqlalchemy import select, update
 from app.config import settings
 from app.models import DocumentLedger, DocumentAnalysis
 
+class SimpleRetriever:
+    def __init__(self, chunks: list[str]):
+        self.chunks = chunks
+        self.doc_count = len(chunks)
+        self.docs = []
+        self.df = {}
+        for chunk in chunks:
+            tokens = self._tokenize(chunk)
+            tf = {}
+            for t in tokens:
+                tf[t] = tf.get(t, 0) + 1
+            self.docs.append((chunk, tf, len(tokens)))
+            for t in tf:
+                self.df[t] = self.df.get(t, 0) + 1
+        
+        self.idf = {}
+        for t, count in self.df.items():
+            # BM25-style IDF formula
+            self.idf[t] = math.log((self.doc_count - count + 0.5) / (count + 0.5) + 1.0)
+            
+        self.avg_doc_len = sum(d[2] for d in self.docs) / max(1, self.doc_count)
+        self.k1 = 1.5
+        self.b = 0.75
+
+    def _tokenize(self, text: str) -> list[str]:
+        return re.findall(r'[a-z0-9]+', text.lower())
+
+    def search(self, query: str, k: int = 3) -> list[str]:
+        query_tokens = self._tokenize(query)
+        if not query_tokens:
+            return self.chunks[:k]
+            
+        scores = []
+        for chunk, tf, doc_len in self.docs:
+            score = 0.0
+            for t in query_tokens:
+                if t in tf:
+                    idf_val = self.idf.get(t, 0)
+                    tf_val = tf[t]
+                    numerator = tf_val * (self.k1 + 1)
+                    denominator = tf_val + self.k1 * (1 - self.b + self.b * (doc_len / self.avg_doc_len))
+                    score += idf_val * (numerator / denominator)
+            scores.append((score, chunk))
+            
+        scores.sort(key=lambda x: x[0], reverse=True)
+        return [chunk for score, chunk in scores[:k]]
+
 class AIAnalyzer:
     def __init__(self):
         self.generation_model = settings.OPENROUTER_MODEL
-        self.embedding_model = "all-MiniLM-L6-v2"
         self.openrouter_api_key = settings.OPENROUTER_API_KEY
-        self.index = None
-        self.chunks = []
+        self.retriever = None
         self.file_cache = {} # Static in-memory cache public_id -> text
-        self.embedder = None # Lazy-loaded SentenceTransformer
         
         headers = {
             "HTTP-Referer": "http://localhost:8000",
@@ -40,19 +84,21 @@ class AIAnalyzer:
             "compliance_score": 0,
             "legal_conflicts": []
         }
-        self._load_faiss_index()
+        self._init_retriever()
 
-    def _load_faiss_index(self):
+    def _init_retriever(self):
         try:
-            index_path = "faiss_index/legal_index.faiss"
             chunks_path = "faiss_index/chunks.json"
-            if os.path.exists(index_path) and os.path.exists(chunks_path):
-                self.index = faiss.read_index(index_path)
+            if os.path.exists(chunks_path):
                 with open(chunks_path, "r", encoding="utf-8") as f:
-                    self.chunks = json.load(f)
-                print("[LexNet] FAISS index loaded successfully.")
+                    chunks = json.load(f)
+                self.retriever = SimpleRetriever(chunks)
+                print("[LexNet] BM25 retriever initialized successfully.")
+            else:
+                print("[LexNet] chunks.json not found, retriever not initialized.")
         except Exception as e:
-            print(f"[LexNet] Failed to load FAISS index: {e}")
+            print(f"[LexNet] Failed to initialize retriever: {e}")
+
 
     async def _save_analysis_data(self, db, ledger_doc, update_dict: dict) -> None:
         """Safely save or update DocumentAnalysis in a way that avoids IntegrityError and race conditions."""
@@ -199,13 +245,6 @@ class AIAnalyzer:
                 f.flush()
             yield f"\nERROR: {str(e)}"
 
-    def _init_embedder(self):
-        if self.embedder is None:
-            print(f"[LexNet] Initializing local embedding model ({self.embedding_model})...")
-            from sentence_transformers import SentenceTransformer
-            self.embedder = SentenceTransformer(self.embedding_model)
-        return self.embedder
-
     def _get_pymupdf_text(self, file_path: str) -> str:
         """Fast and robust text extraction using PyMuPDF (fitz)."""
         try:
@@ -331,19 +370,12 @@ class AIAnalyzer:
                 yield chunk
             return
 
-        if not self.index:
+        if not self.retriever:
             yield "Demo Mode: RAG Index not configured."
             return
             
         try:
-            embedder = self._init_embedder()
-            embedding = embedder.encode(query)
-            query_vector = np.array([embedding], dtype='float32')
-            
-            k = 3
-            D, I = self.index.search(query_vector, k)
-            
-            context_pieces = [self.chunks[i] for i in I[0] if i < len(self.chunks) and i != -1]
+            context_pieces = self.retriever.search(query, k=3)
             context = "\n\n".join(context_pieces)
             
             prompt = f"""You are a knowledgeable legal assistant specializing in Indian law. 
@@ -357,6 +389,7 @@ Instructions: Answer the user's question comprehensively. Use the provided conte
                 yield chunk
         except Exception as e:
             yield f"Error: {e}"
+
 
     async def analyze_document(self, file_path: str, public_id: str = "temp", db=None, pdf_bytes: bytes = None) -> dict:
         """Perform deep analysis on a local file, with persistence and smart re-analysis."""
@@ -691,18 +724,15 @@ Instructions: Answer the user's question comprehensively. Use the provided conte
         except Exception as e:
             print(f"[LexNet] Gemini similar cases exception: {e}. Attempting OpenRouter/FAISS fallback...")
             try:
-                # 1. Retrieve RAG context if FAISS is available
+                # 1. Retrieve RAG context if retriever is available
                 context = ""
-                if self.index and self.chunks:
+                if self.retriever:
                     try:
-                        embedder = self._init_embedder()
-                        embedding = embedder.encode(text_context[:1000])
-                        query_vector = np.array([embedding], dtype='float32')
-                        D, I = self.index.search(query_vector, 3)
-                        context_pieces = [self.chunks[i] for i in I[0] if i < len(self.chunks) and i != -1]
+                        context_pieces = self.retriever.search(text_context[:1000], k=3)
                         context = "\n\n".join(context_pieces)
-                    except Exception as faiss_exc:
-                        print(f"[LexNet] Fallback FAISS search failed: {faiss_exc}")
+                    except Exception as ret_exc:
+                        print(f"[LexNet] Fallback retriever search failed: {ret_exc}")
+
 
                 # 2. Formulate fallback prompt
                 fallback_prompt = f"""
