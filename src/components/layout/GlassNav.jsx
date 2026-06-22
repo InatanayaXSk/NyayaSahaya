@@ -92,8 +92,8 @@ export default function GlassNav() {
                             <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-text-muted text-sm pointer-events-none">expand_more</span>
                         </div>
                     )}
-                    {/* Admin Settings — lawyers only */}
-                    {user?.role === 'lawyer' && (
+                    {/* Admin Settings — both client and lawyer */}
+                    {user && (
                         <Link
                             to="/admin-settings"
                             className={`p-2 hover:bg-primary/10 rounded-full transition-colors ${location.pathname === '/admin-settings' ? 'text-primary bg-primary/10' : 'text-text-muted'}`}
